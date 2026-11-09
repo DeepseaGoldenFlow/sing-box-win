@@ -54,7 +54,7 @@ core restart: {"ok":true}; state running=true
 node delay HTTP 200 {"delay":269}
 ```
 
-系统代理测试前后都为 `ProxyEnable=0`、`ProxyServer=127.0.0.1:3067`。没有停用或卸载 Karing、Tailscale、Clash 等软件。
+系统代理测试前后都为 `ProxyEnable=0`、`ProxyServer=127.0.0.1:<previous-proxy-port>`。没有停用或卸载 Karing、Tailscale、Clash 等软件。
 
 存活时直接子进程为 1 个 `conhost.exe`，没有外置 sing-box 内核子进程。Edge 启动器没有保持存活。本次 WSL 启动客户端处于 Windows Session 0，已有 Edge 在 Session 1，因此**不能证明交互桌面上的可见窗口和关窗行为**。代码中 HTTP/内核生命周期不依赖浏览器进程，关闭浏览器不会触发退出；仍需在用户交互桌面双击 exe 补测实际窗口体验。
 
@@ -62,7 +62,7 @@ node delay HTTP 200 {"delay":269}
 
 ```text
 Stopped PID 21484
-{"ProxyEnable":0,"ProxyServer":"127.0.0.1:3067"}
+{"ProxyEnable":0,"ProxyServer":"127.0.0.1:<previous-proxy-port>"}
 Remaining client processes=0
 Remaining acceptance Edge launchers=0
 ```
