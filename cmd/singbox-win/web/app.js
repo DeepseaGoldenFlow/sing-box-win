@@ -3,15 +3,18 @@ const dictionary = {
 "upload":["上传速度","Upload"],"download":["下载速度","Download"],"network":["网络","Network"],"duration":["时长","Duration"],"clear":["清空","Clear"],"copyLink":["复制导入链接","Copy import link"],"language":["语言","Language"],"theme":["主题","Theme"],"dark":["深色","Dark"],"light":["浅色","Light"],"register":["注册深链","Register deep links"],"unregister":["取消注册","Unregister"],"exportLogs":["导出日志","Export logs"],"quit":["退出客户端","Quit"],"actions":["操作","Actions"],"saved":["已保存","Saved"],"connected":["运行中","Connected"],"stopped":["已停止","Stopped"],"noProfile":["尚未选择配置","No profile selected"],"test":["测速","Test latency"],"urlRequired":["请先输入订阅 URL","Enter a subscription URL first"],
 };
 Object.assign(dictionary,{chooseProfile:["去选择配置","Choose a profile"],countUnit:["个","items"],trafficEmpty:["暂无流量数据，启动后开始采样","No traffic data. Start to begin sampling."]});
+Object.assign(dictionary,{starting:["启动中…","Starting…"],stopping:["停止中…","Stopping…"],failed:["异常","Error"]});
 let language="zh-CN";
 function t(key){return dictionary[key]?.[language==="en"?1:0] || key;}
 function applyLanguage(value){language=value==="en"?"en":"zh-CN";document.documentElement.lang=language;document.querySelectorAll("[data-i18n]").forEach(el=>{if(el.matches("nav button"))return;el.textContent=t(el.dataset.i18n);});document.querySelectorAll("[data-i18n-placeholder]").forEach(el=>el.placeholder=t(el.dataset.i18nPlaceholder));if(document.getElementById("title"))document.getElementById("title").textContent=t(page);}
 function icon(name){const paths={Dashboard:'<path d="M3 17a9 9 0 1 1 18 0M12 13l4-5M5 17h14"/>',Profiles:'<path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6"/>',Connections:'<path d="m9 15 6-6M8 16l-2 2a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m4 0 2-2a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(1 -1)"/>',Logs:'<path d="M8 6h12M8 12h12M8 18h12M3 6h1M3 12h1M3 18h1"/>',Settings:'<path d="m9 3-1 3-3 1-2 3 2 2-1 4 3 2 3-1 3 2 3-1 1-3 3-2-1-4-3-1-1-3z"/><circle cx="11" cy="11" r="3"/>'};const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("viewBox","0 0 24 24");svg.setAttribute("fill","none");svg.setAttribute("stroke","currentColor");svg.setAttribute("stroke-width","1.6");svg.setAttribute("aria-hidden","true");svg.innerHTML=paths[name]||'<path d="M12 4v16m-6-6 6 6 6-6"/>';return svg;}
-Object.assign(dictionary,{"关闭窗口后继续运行": ["关闭窗口后继续运行", "Runs in background when closed"], "退出客户端": ["退出客户端", "Quit"], "启动": ["启动", "Start"], "停止": ["停止", "Stop"], "重启": ["重启", "Restart"], "系统代理": ["系统代理", "System proxy"], "TUN 模式待支持 · 关闭窗口后继续运行": ["TUN 模式待支持 · 关闭窗口后继续运行", "TUN support pending · Runs in background when closed"], "连接数": ["连接数", "Connections"], "累计上传 0 B / 累计下载 0 B": ["累计上传 0 B / 累计下载 0 B", "Total upload 0 B / Total download 0 B"], "节点与分组": ["节点与分组", "Nodes & groups"], "刷新列表": ["刷新列表", "Refresh"], "全部测速": ["全部测速", "Test all"], "导入配置": ["导入配置", "Import profile"], "订阅 URL": ["订阅 URL", "Subscription URL"], "Windows 文件路径": ["Windows 文件路径", "Windows file path"], "粘贴 JSON": ["粘贴 JSON", "Paste JSON"], "导入": ["导入", "Import"], "从剪贴板粘贴": ["从剪贴板粘贴", "Paste from clipboard"], "关闭全部连接": ["关闭全部连接", "Close all connections"], "规则": ["规则", "Rule"], "全部级别": ["全部级别", "All levels"], "自动滚动": ["自动滚动", "Auto scroll"], "客户端设置": ["客户端设置", "Client settings"], "开机自启": ["开机自启", "Launch at sign-in"], "启动后自动连接": ["启动后自动连接", "Auto connect"], "允许局域网访问代理端口": ["允许局域网访问代理端口", "Allow LAN"], "本地代理端口": ["本地代理端口", "Mixed port"], "订阅更新间隔（小时，0 为关闭）": ["订阅更新间隔（小时，0 为关闭）", "Update interval (hours, 0 disables)"], "保存设置": ["保存设置", "Save settings"], "配置名称": ["配置名称", "Profile name"], "输入订阅 URL、文件路径或配置内容": ["输入订阅 URL、文件路径或配置内容", "Subscription URL, file path or JSON"], "搜索日志": ["搜索日志", "Search logs"], "搜索连接": ["搜索连接", "Search connections"], "停用": ["停用", "Disable"], "启用": ["启用", "Enable"], "改名": ["改名", "Rename"], "刷新": ["刷新", "Update"], "删除": ["删除", "Delete"], "关闭": ["关闭", "Close"], "订阅": ["订阅", "Subscription"], "本地": ["本地", "Local"]});
+Object.assign(dictionary,{"关闭窗口后继续运行": ["关闭窗口后继续运行", "Runs in background when closed"], "退出客户端": ["退出客户端", "Quit"], "启动": ["启动", "Start"], "停止": ["停止", "Stop"], "重启": ["重启", "Restart"], "系统代理": ["系统代理", "System proxy"], "TUN 模式待支持": ["TUN 模式待支持", "TUN support pending"], "连接数": ["连接数", "Connections"], "累计上传 0 B / 累计下载 0 B": ["累计上传 0 B / 累计下载 0 B", "Total upload 0 B / Total download 0 B"], "节点与分组": ["节点与分组", "Nodes & groups"], "刷新列表": ["刷新列表", "Refresh"], "全部测速": ["全部测速", "Test all"], "导入配置": ["导入配置", "Import profile"], "订阅 URL": ["订阅 URL", "Subscription URL"], "Windows 文件路径": ["Windows 文件路径", "Windows file path"], "粘贴 JSON": ["粘贴 JSON", "Paste JSON"], "导入": ["导入", "Import"], "从剪贴板粘贴": ["从剪贴板粘贴", "Paste from clipboard"], "关闭全部连接": ["关闭全部连接", "Close all connections"], "规则": ["规则", "Rule"], "全部级别": ["全部级别", "All levels"], "自动滚动": ["自动滚动", "Auto scroll"], "客户端设置": ["客户端设置", "Client settings"], "开机自启": ["开机自启", "Launch at sign-in"], "启动后自动连接": ["启动后自动连接", "Auto connect"], "允许局域网访问代理端口": ["允许局域网访问代理端口", "Allow LAN"], "本地代理端口": ["本地代理端口", "Mixed port"], "订阅更新间隔（小时，0 为关闭）": ["订阅更新间隔（小时，0 为关闭）", "Update interval (hours, 0 disables)"], "保存设置": ["保存设置", "Save settings"], "配置名称": ["配置名称", "Profile name"], "输入订阅 URL、文件路径或配置内容": ["输入订阅 URL、文件路径或配置内容", "Subscription URL, file path or JSON"], "搜索日志": ["搜索日志", "Search logs"], "搜索连接": ["搜索连接", "Search connections"], "停用": ["停用", "Disable"], "启用": ["启用", "Enable"], "改名": ["改名", "Rename"], "刷新": ["刷新", "Update"], "删除": ["删除", "Delete"], "关闭": ["关闭", "Close"], "订阅": ["订阅", "Subscription"], "本地": ["本地", "Local"]});
 "use strict";
 const $ = (id) => document.getElementById(id);
 let page = "Dashboard",
   running = false,
+  corePending = null,
+  coreState = null,
   last = null,
   history = [],
   nodeTags = [];
@@ -67,7 +70,29 @@ for (const title of [
   document.querySelector("nav").append(b);
 }
 for (const b of document.querySelectorAll("[data-core]"))
-  b.onclick = () => action(() => api("core/" + b.dataset.core, "POST"));
+  b.onclick = () => action(async () => {
+    corePending = b.dataset.core;
+    renderCoreState();
+    try { await api("core/" + b.dataset.core, "POST"); }
+    catch (e) { coreState = { ...coreState, error: String(e.message || e) }; throw e; }
+    finally { corePending = null; renderCoreState(); }
+  });
+function renderCoreState() {
+  const s = coreState || {};
+  const state = corePending ? (corePending === "stop" ? "stopping" : "starting") : s.error ? "failed" : s.running ? "connected" : "stopped";
+  $("connectionState").textContent = t(state);
+  $("status").textContent = t(state) + (s.version ? " · v" + s.version : "");
+  $("connectionState").className = "statusLabel " + (corePending ? "" : s.error ? "stateError" : s.running ? "stateRunning" : "");
+  for (const b of document.querySelectorAll("[data-core]")) {
+    b.classList.toggle("primary", b.dataset.core === "start" && !!s.profile);
+    b.disabled = !!corePending || (b.dataset.core === "start" ? s.running || !s.profile : !s.running);
+  }
+  $("chooseProfile").hidden = !!s.profile;
+  $("chooseProfile").classList.toggle("primary", !s.profile);
+  $("chartEmptyAction").dataset.i18n = s.profile ? "启动" : "chooseProfile";
+  $("chartEmptyAction").textContent = t($("chartEmptyAction").dataset.i18n);
+  $("chartEmptyAction").disabled = !!corePending;
+}
 $("proxy").onchange = () =>
   action(() => api("proxy", "POST", { enabled: $("proxy").checked }));
 $("quit").onclick = () =>
@@ -227,12 +252,9 @@ $("delayAll").onclick=()=>action(async()=>{for(const tag of nodeTags){try{const 
 async function poll() {
   const s = await api("state");
   running = s.running;
-  $("connectionState").textContent=t(s.running?"connected":"stopped");
-  for(const b of document.querySelectorAll("[data-core]")){b.classList.toggle("primary",b.dataset.core==="start");b.disabled=b.dataset.core==="start"?running:!running;}
-  $("status").textContent =
-    (s.running ? t("connected") : t("stopped")) + " · v" + s.version;
+  coreState = s;
+  renderCoreState();
   $("profile").textContent = s.profile || t("noProfile");
-  $("chooseProfile").hidden = !!s.profile;
   $("proxy").checked = s.system_proxy;
   if (s.error) error(s.error);
   if (page === "Logs") {
@@ -307,6 +329,7 @@ for(const el of document.querySelectorAll("[data-arrow]")){el.append(icon("arrow
 function setRate(id,n){const [value,unit]=bytes(n).split(" ");const small=document.createElement("span");small.className="unit";small.textContent=" "+unit+"/s";$(id).replaceChildren(document.createTextNode(value),small);}
 
 $("chooseProfile").onclick=()=>document.querySelector('[data-page="Profiles"]').click();
+$("chartEmptyAction").onclick=()=>coreState?.profile ? $("btn-start").click() : $("chooseProfile").click();
 $("countIcon").append(icon("Connections"));
 function renderChart(now){
   const samples=history.filter(v=>now-v[2]<60000);
@@ -315,7 +338,7 @@ function renderChart(now){
   const unit=max>=1048576?1048576:max>=1024?1024:1;
   const suffix=unit===1048576?"MB/s":unit===1024?"KB/s":"B/s";
   $("yAxis").replaceChildren(...[1,.75,.5,.25,0].map(f=>{const el=document.createElement("span");el.textContent=Number((max*f/unit).toFixed(2))+" "+suffix;return el;}));
-  $("chartEmpty").hidden=samples.length>0;
+  $("chartEmpty").hidden=running;
   for(const [idx,id] of [[0,"upLine"],[1,"downLine"]])$(id).setAttribute("points",samples.map(v=>(800-(now-v[2])*800/60000)+","+(158-v[idx]/max*156)).join(" "));
 }
 renderChart(Date.now());
