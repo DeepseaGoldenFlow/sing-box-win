@@ -2,6 +2,7 @@ const dictionary = {
 "Dashboard":["仪表盘","Dashboard"],"Profiles":["配置","Profiles"],"Connections":["连接","Connections"],"Logs":["日志","Logs"],"Settings":["设置","Settings"],
 "upload":["上传速度","Upload"],"download":["下载速度","Download"],"network":["网络","Network"],"duration":["时长","Duration"],"clear":["清空","Clear"],"copyLink":["复制导入链接","Copy import link"],"language":["语言","Language"],"theme":["主题","Theme"],"dark":["深色","Dark"],"light":["浅色","Light"],"register":["注册深链","Register deep links"],"unregister":["取消注册","Unregister"],"exportLogs":["导出日志","Export logs"],"quit":["退出客户端","Quit"],"actions":["操作","Actions"],"saved":["已保存","Saved"],"connected":["运行中","Connected"],"stopped":["已停止","Stopped"],"noProfile":["尚未选择配置","No profile selected"],"test":["测速","Test latency"],"urlRequired":["请先输入订阅 URL","Enter a subscription URL first"],
 };
+Object.assign(dictionary,{chooseProfile:["去选择配置","Choose a profile"],countUnit:["个","items"],trafficEmpty:["暂无流量数据，启动后开始采样","No traffic data. Start to begin sampling."]});
 let language="zh-CN";
 function t(key){return dictionary[key]?.[language==="en"?1:0] || key;}
 function applyLanguage(value){language=value==="en"?"en":"zh-CN";document.documentElement.lang=language;document.querySelectorAll("[data-i18n]").forEach(el=>{if(el.matches("nav button"))return;el.textContent=t(el.dataset.i18n);});document.querySelectorAll("[data-i18n-placeholder]").forEach(el=>el.placeholder=t(el.dataset.i18nPlaceholder));if(document.getElementById("title"))document.getElementById("title").textContent=t(page);}
@@ -227,10 +228,11 @@ async function poll() {
   const s = await api("state");
   running = s.running;
   $("connectionState").textContent=t(s.running?"connected":"stopped");
-  for(const b of document.querySelectorAll("[data-core]")){b.classList.toggle("primary",b.dataset.core===(running?"stop":"start"));b.disabled=b.dataset.core==="start"?running:!running;}
+  for(const b of document.querySelectorAll("[data-core]")){b.classList.toggle("primary",b.dataset.core==="start");b.disabled=b.dataset.core==="start"?running:!running;}
   $("status").textContent =
     (s.running ? t("connected") : t("stopped")) + " · v" + s.version;
   $("profile").textContent = s.profile || t("noProfile");
+  $("chooseProfile").hidden = !!s.profile;
   $("proxy").checked = s.system_proxy;
   if (s.error) error(s.error);
   if (page === "Logs") {
@@ -267,25 +269,15 @@ async function poll() {
     last = { ...t, time: now };
     setRate("up",up);
     setRate("down",down);
-    $("count").textContent = t.connections;
+    $("countValue").textContent = t.connections;
     $("totals").textContent =
       (language==="en"?"Total upload ":"累计上传 ") + bytes(t.upload_total) + (language==="en"?" / Download ":" / 累计下载 ") + bytes(t.download_total);
     history.push([up, down, now]);
     history = history.filter(v=>now-v[2]<60000);
     if (history.length > 60) history.shift();
-    const max = Math.max(1, ...history.flatMap(v=>v.slice(0,2)));
-    for (const [idx, id] of [
-      [0, "upLine"],
-      [1, "downLine"],
-    ])
-      $(id).setAttribute(
-        "points",
-        history
-          .map((v, i) => 800 - (now-v[2])*800/60000 + "," + (145 - (v[idx] / max) * 140))
-          .join(" "),
-      );
+    renderChart(now);
   }
-  if (!running) {last=null;setRate("up",0);setRate("down",0);$("count").textContent="0";}
+  if (!running) {last=null;setRate("up",0);setRate("down",0);$("countValue").textContent="0";renderChart(Date.now());}
   if(page==="Dashboard" && (!window.nodesLoaded || window.nodesRunning!==running)){window.nodesLoaded=true;window.nodesRunning=running;await nodes();}
 }
 let polling = false;
@@ -313,3 +305,17 @@ $("exportLogs").onclick=()=>action(async()=>{const logs=await api("logs?limit=50
 for(const el of document.querySelectorAll("[data-arrow]")){el.append(icon("arrow"));if(el.dataset.arrow==="up")el.firstChild.style.transform="rotate(180deg)";}
 
 function setRate(id,n){const [value,unit]=bytes(n).split(" ");const small=document.createElement("span");small.className="unit";small.textContent=" "+unit+"/s";$(id).replaceChildren(document.createTextNode(value),small);}
+
+$("chooseProfile").onclick=()=>document.querySelector('[data-page="Profiles"]').click();
+$("countIcon").append(icon("Connections"));
+function renderChart(now){
+  const samples=history.filter(v=>now-v[2]<60000);
+  const peak=Math.max(0,...samples.flatMap(v=>v.slice(0,2)));
+  const max=peak ? Math.pow(10,Math.floor(Math.log10(peak)))*Math.ceil(peak/Math.pow(10,Math.floor(Math.log10(peak)))) : 1024;
+  const unit=max>=1048576?1048576:max>=1024?1024:1;
+  const suffix=unit===1048576?"MB/s":unit===1024?"KB/s":"B/s";
+  $("yAxis").replaceChildren(...[1,.75,.5,.25,0].map(f=>{const el=document.createElement("span");el.textContent=Number((max*f/unit).toFixed(2))+" "+suffix;return el;}));
+  $("chartEmpty").hidden=samples.length>0;
+  for(const [idx,id] of [[0,"upLine"],[1,"downLine"]])$(id).setAttribute("points",samples.map(v=>(800-(now-v[2])*800/60000)+","+(158-v[idx]/max*156)).join(" "));
+}
+renderChart(Date.now());
