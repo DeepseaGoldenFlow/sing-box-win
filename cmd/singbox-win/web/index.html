@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>sing-box for Windows</title
+  ><link rel="stylesheet" href="style.css" />
+  <body>
+    <aside>
+      <h2>sing-box <small>Windows</small></h2>
+      <nav></nav>
+      <footer>关闭窗口后继续运行<button id="quit">退出客户端</button></footer>
+    </aside>
+    <main>
+      <header>
+        <h1 id="title">Dashboard</h1>
+        <span id="status">正在连接…</span>
+      </header>
+      <div id="error" role="alert"></div>
+      <section id="Dashboard">
+        <div class="card">
+          <h2 id="profile">尚未选择配置</h2>
+          <div class="row">
+            <button data-core="start">启动</button
+            ><button data-core="stop">停止</button
+            ><button data-core="restart">重启</button
+            ><label><input type="checkbox" id="proxy" />系统代理</label>
+          </div>
+          <p>TUN 模式待支持 · 内核错误会原文显示在上方</p>
+        </div>
+        <div class="metrics">
+          <article>↑ 上传速度<strong id="up">—</strong></article>
+          <article>↓ 下载速度<strong id="down">—</strong></article>
+          <article>连接数<strong id="count">—</strong></article>
+        </div>
+        <div class="card">
+          <svg id="chart" viewBox="0 0 800 150" preserveAspectRatio="none">
+            <polyline
+              id="upLine"
+              fill="none"
+              stroke="#BF5AF2"
+              stroke-width="2"
+            />
+            <polyline
+              id="downLine"
+              fill="none"
+              stroke="#0A84FF"
+              stroke-width="2"
+            />
+          </svg>
+          <p id="totals">等待流量统计</p>
+        </div>
+        <div class="card">
+          <h2>节点与分组</h2>
+          <button id="nodesRefresh">刷新列表</button
+          ><button id="delayAll">全部测速</button>
+          <div id="nodes"></div>
+        </div>
+      </section>
+      <section id="Profiles" hidden>
+        <div class="card">
+          <h2>导入配置</h2>
+          <input id="name" placeholder="配置名称" /><select id="source">
+            <option value="url">订阅 URL</option>
+            <option value="path">Windows 文件路径</option>
+            <option value="content">粘贴 JSON</option></select
+          ><textarea
+            id="input"
+            placeholder="输入订阅 URL、文件路径或配置内容"
+          ></textarea
+          ><button id="import">导入</button
+          ><button id="clipboard">从剪贴板粘贴</button
+          ><input type="file" id="file" accept=".json,application/json" />
+        </div>
+        <div id="profiles"></div>
+      </section>
+      <section id="Connections" hidden>
+        <div class="row"><button id="closeAll">关闭全部连接</button></div>
+        <div class="card scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Host</th>
+                <th>规则</th>
+                <th>耗时</th>
+                <th>↑ / ↓</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="connections"></tbody>
+          </table>
+        </div>
+      </section>
+      <section id="Logs" hidden>
+        <div class="row">
+          <select id="level">
+            <option value="">全部级别</option>
+            <option>trace</option>
+            <option>debug</option>
+            <option>info</option>
+            <option>warn</option>
+            <option>error</option>
+            <option>fatal</option></select
+          ><input id="search" placeholder="搜索日志" /><label
+            ><input id="autoscroll" type="checkbox" checked />自动滚动</label
+          >
+        </div>
+        <pre id="logs"></pre>
+      </section>
+      <section id="Settings" hidden>
+        <form id="settings" class="card">
+          <h2>客户端设置</h2>
+          <label><input type="checkbox" name="auto_start" />开机自启</label
+          ><label
+            ><input type="checkbox" name="auto_connect" />启动后自动连接</label
+          ><label
+            ><input
+              type="checkbox"
+              name="allow_lan"
+            />允许局域网访问代理端口</label
+          ><label
+            >本地代理端口<input
+              type="number"
+              name="port"
+              min="1"
+              max="65535"
+              required /></label
+          ><label
+            >订阅更新间隔（小时，0 为关闭）<input
+              type="number"
+              name="update_hours"
+              min="0"
+              required
+          /></label>
+          <p>
+            深色主题 ·
+            简体中文。TUN、多语言、规则编辑、内核更新与深链协议尚未实现。
+          </p>
+          <button>保存设置</button><span id="saved"></span>
+        </form>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
