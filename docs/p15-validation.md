@@ -44,6 +44,8 @@ WINDOWS state running=True profiles=1 groups=2 selector_members=2
 WINDOWS node switch PASS
 WINDOWS single instance PASS
 WINDOWS forced termination + proxy recovery PASS
+WINDOWS protocol registration PASS
+WINDOWS protocol unregistration PASS
 WINDOWS stopped=True
 ```
 
