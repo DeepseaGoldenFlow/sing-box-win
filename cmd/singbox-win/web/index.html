@@ -4,12 +4,12 @@
     name="viewport"
     content="width=device-width,initial-scale=1"
   /><title>sing-box for Windows</title
-  ><link rel="stylesheet" href="style.css" />
+  ><link rel="icon" href="icon.svg" /><link rel="stylesheet" href="style.css" />
   <body>
     <aside>
       <h2>sing-box <small>Windows</small></h2>
       <nav></nav>
-      <footer>关闭窗口后继续运行<button id="quit">退出客户端</button></footer>
+      <footer><span data-i18n="关闭窗口后继续运行">关闭窗口后继续运行</span><button id="quit"><span data-i18n="退出客户端">退出客户端</span></button></footer>
     </aside>
     <main>
       <header>
@@ -18,72 +18,71 @@
       </header>
       <div id="error" role="alert"></div>
       <section id="Dashboard">
-        <div class="card">
-          <h2 id="profile">尚未选择配置</h2>
+        <div class="card" id="statusCard">
+          <div class="statusLabel" id="connectionState">0</div><h2 id="profile">尚未选择配置</h2>
           <div class="row">
-            <button data-core="start">启动</button
-            ><button data-core="stop">停止</button
-            ><button data-core="restart">重启</button
-            ><label><input type="checkbox" id="proxy" />系统代理</label>
+            <button class="primary" data-core="start"><span data-i18n="启动">启动</span></button
+            ><button data-core="stop"><span data-i18n="停止">停止</span></button
+            ><button data-core="restart"><span data-i18n="重启">重启</span></button
+            ><label><input type="checkbox" id="proxy" /><span data-i18n="系统代理">系统代理</span></label>
           </div>
-          <p>TUN 模式待支持 · 内核错误会原文显示在上方</p>
+          <p><span data-i18n="TUN 模式待支持 · 关闭窗口后继续运行">TUN 模式待支持 · 关闭窗口后继续运行</span></p>
         </div>
         <div class="metrics">
-          <article>↑ 上传速度<strong id="up">—</strong></article>
-          <article>↓ 下载速度<strong id="down">—</strong></article>
-          <article>连接数<strong id="count">—</strong></article>
+          <article><span class="metricIcon upload" data-arrow="up"></span><span data-i18n="upload">上传速度</span><strong id="up">0 B/s</strong></article>
+          <article><span class="metricIcon download" data-arrow="down"></span><span data-i18n="download">下载速度</span><strong id="down">0 B/s</strong></article>
+          <article><span data-i18n="连接数">连接数</span><strong id="count">0</strong></article>
         </div>
         <div class="card">
           <svg id="chart" viewBox="0 0 800 150" preserveAspectRatio="none">
             <polyline
               id="upLine"
               fill="none"
-              stroke="#BF5AF2"
+              stroke="#FF9F0A"
               stroke-width="2"
             />
             <polyline
               id="downLine"
               fill="none"
-              stroke="#0A84FF"
+              stroke="#30D158"
               stroke-width="2"
             />
           </svg>
-          <p id="totals">等待流量统计</p>
+          <p id="totals"><span data-i18n="累计上传 0 B / 累计下载 0 B">累计上传 0 B / 累计下载 0 B</span></p>
         </div>
         <div class="card">
-          <h2>节点与分组</h2>
-          <button id="nodesRefresh">刷新列表</button
-          ><button id="delayAll">全部测速</button>
+          <h2><span data-i18n="节点与分组">节点与分组</span></h2>
+          <button id="nodesRefresh"><span data-i18n="刷新列表">刷新列表</span></button
+          ><button id="delayAll"><span data-i18n="全部测速">全部测速</span></button>
           <div id="nodes"></div>
         </div>
       </section>
       <section id="Profiles" hidden>
         <div class="card">
-          <h2>导入配置</h2>
-          <input id="name" placeholder="配置名称" /><select id="source">
-            <option value="url">订阅 URL</option>
-            <option value="path">Windows 文件路径</option>
-            <option value="content">粘贴 JSON</option></select
+          <h2><span data-i18n="导入配置">导入配置</span></h2>
+          <input id="name" data-i18n-placeholder="配置名称" placeholder="配置名称" /><select id="source">
+            <option value="url" data-i18n="订阅 URL">订阅 URL</option>
+            <option value="path" data-i18n="Windows 文件路径">Windows 文件路径</option>
+            <option value="content" data-i18n="粘贴 JSON">粘贴 JSON</option></select
           ><textarea
             id="input"
-            placeholder="输入订阅 URL、文件路径或配置内容"
+            data-i18n-placeholder="输入订阅 URL、文件路径或配置内容" placeholder="输入订阅 URL、文件路径或配置内容"
           ></textarea
-          ><button id="import">导入</button
-          ><button id="clipboard">从剪贴板粘贴</button
+          ><button id="copyLink" data-i18n="copyLink">复制导入链接</button><button id="import" class="primary"><span data-i18n="导入">导入</span></button
+          ><button id="clipboard"><span data-i18n="从剪贴板粘贴">从剪贴板粘贴</span></button
           ><input type="file" id="file" accept=".json,application/json" />
         </div>
         <div id="profiles"></div>
       </section>
       <section id="Connections" hidden>
-        <div class="row"><button id="closeAll">关闭全部连接</button></div>
+        <div class="row"><input id="connectionSearch" data-i18n-placeholder="搜索连接" placeholder="搜索连接" /><button id="closeAll"><span data-i18n="关闭全部连接">关闭全部连接</span></button></div>
         <div class="card scroll">
           <table>
             <thead>
               <tr>
                 <th>Host</th>
-                <th>规则</th>
-                <th>耗时</th>
-                <th>↑ / ↓</th>
+                <th><span data-i18n="规则">规则</span></th>
+                <th data-i18n="network">网络</th><th data-i18n="upload">上传</th><th data-i18n="download">下载</th><th data-i18n="duration">时长</th>
                 <th></th>
               </tr>
             </thead>
@@ -94,50 +93,48 @@
       <section id="Logs" hidden>
         <div class="row">
           <select id="level">
-            <option value="">全部级别</option>
+            <option value="" data-i18n="全部级别">全部级别</option>
             <option>trace</option>
             <option>debug</option>
             <option>info</option>
             <option>warn</option>
             <option>error</option>
             <option>fatal</option></select
-          ><input id="search" placeholder="搜索日志" /><label
-            ><input id="autoscroll" type="checkbox" checked />自动滚动</label
+          ><input id="search" data-i18n-placeholder="搜索日志" placeholder="搜索日志" /><label
+            ><input id="autoscroll" type="checkbox" checked /><span data-i18n="自动滚动">自动滚动</span></label
           >
         </div>
-        <pre id="logs"></pre>
+        <button id="clearLogs" data-i18n="clear">清空</button><pre id="logs"></pre>
       </section>
       <section id="Settings" hidden>
         <form id="settings" class="card">
-          <h2>客户端设置</h2>
-          <label><input type="checkbox" name="auto_start" />开机自启</label
+          <h2><span data-i18n="客户端设置">客户端设置</span></h2>
+          <label><input type="checkbox" name="auto_start" /><span data-i18n="开机自启">开机自启</span></label
           ><label
-            ><input type="checkbox" name="auto_connect" />启动后自动连接</label
+            ><input type="checkbox" name="auto_connect" /><span data-i18n="启动后自动连接">启动后自动连接</span></label
           ><label
             ><input
               type="checkbox"
               name="allow_lan"
-            />允许局域网访问代理端口</label
+            /><span data-i18n="允许局域网访问代理端口">允许局域网访问代理端口</span></label
           ><label
-            >本地代理端口<input
+            ><span data-i18n="本地代理端口">本地代理端口</span><input
               type="number"
               name="port"
               min="1"
               max="65535"
               required /></label
           ><label
-            >订阅更新间隔（小时，0 为关闭）<input
+            ><span data-i18n="订阅更新间隔（小时，0 为关闭）">订阅更新间隔（小时，0 为关闭）</span><input
               type="number"
               name="update_hours"
               min="0"
               required
           /></label>
-          <p>
-            深色主题 ·
-            简体中文。TUN、多语言、规则编辑、内核更新与深链协议尚未实现。
-          </p>
-          <button>保存设置</button><span id="saved"></span>
-        </form>
+          <label><span data-i18n="language">语言</span><select name="language" id="language"><option value="zh-CN">简体中文</option><option value="en">English</option></select></label>
+          <label><span data-i18n="theme">主题</span><select name="theme" id="theme"><option value="dark" data-i18n="dark">深色</option><option value="light" data-i18n="light">浅色</option></select></label>
+          <button class="primary"><span data-i18n="保存设置">保存设置</span></button><span id="saved"></span>
+        </form><div class="card row"><button id="register" data-i18n="register">注册深链</button><button id="unregister" data-i18n="unregister">取消注册</button><button id="exportLogs" data-i18n="exportLogs">导出日志</button><button id="settingsQuit" data-i18n="quit"><span data-i18n="退出客户端">退出客户端</span></button></div>
       </section>
     </main>
     <script src="app.js"></script>

@@ -32,7 +32,7 @@ import (
 //go:embed web
 var web embed.FS
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 type Profile struct {
 	ID      string    `json:"id"`
@@ -194,6 +194,9 @@ func (a *App) setProxy(on bool) error {
 			return e
 		}
 		a.settings.ProxyBackup = &b
+		if e = a.saveProxyBackup(); e != nil {
+			return e
+		}
 		if e = a.save(); e != nil {
 			return e
 		}
@@ -204,12 +207,13 @@ func (a *App) setProxy(on bool) error {
 		return nil
 	}
 	if a.settings.ProxyBackup != nil {
-		if e := platform.WriteProxy(*a.settings.ProxyBackup); e != nil {
+		if e := a.restoreProxy(); e != nil {
 			return e
 		}
 	}
 	a.proxy = false
 	a.settings.ProxyBackup = nil
+	os.Remove(filepath.Join(a.dir, "proxy-backup.json"))
 	return a.save()
 }
 func reply(w http.ResponseWriter, v any) {
@@ -286,6 +290,31 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	var result any = map[string]bool{"ok": true}
 	var err error
 	switch {
+	case r.URL.Path == "/api/activate" && r.Method == "POST":
+		var b struct{ Link string }
+		err = decode(r, &b)
+		if err == nil && b.Link != "" {
+			err = a.importLink(b.Link)
+		}
+		if err == nil && os.Getenv("SINGBOX_NO_BROWSER") == "" {
+			err = platform.OpenUI(a.runtimeURL() + "/#Profiles")
+		}
+	case r.URL.Path == "/api/protocol" && r.Method == "POST":
+		var b struct{ Enabled bool }
+		if err = decode(r, &b); err == nil {
+			err = platform.RegisterProtocol(b.Enabled)
+		}
+	case r.URL.Path == "/api/logs" && r.Method == "DELETE":
+		a.logMu.Lock()
+		a.logs = nil
+		a.logMu.Unlock()
+	case r.URL.Path == "/api/node/list" && r.Method == "GET":
+		result, err = a.nodeList()
+	case r.URL.Path == "/api/node/select" && r.Method == "PUT":
+		var b struct{ Group, Name string }
+		if err = decode(r, &b); err == nil {
+			err = a.selectNode(b.Group, b.Name)
+		}
 	case r.URL.Path == "/api/state" && r.Method == "GET":
 		name := ""
 		for _, p := range a.settings.Profiles {
@@ -487,7 +516,7 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		a.lastError = err.Error()
+		a.lastError = string([]rune(err.Error())[:min(500, len([]rune(err.Error())))])
 		http.Error(w, err.Error(), 400)
 		return
 	}
@@ -505,17 +534,35 @@ func main() {
 	if e := os.Chdir(dir); e != nil {
 		panic(e)
 	}
+	release, primary, e := platform.SingleInstance(dir)
+	if e != nil {
+		panic(e)
+	}
+	if !primary {
+		if e = activateExisting(dir); e != nil {
+			panic(e)
+		}
+		return
+	}
+	defer release()
 	a := &App{dir: dir, settings: Settings{Port: 2085, Theme: "dark", Language: "zh-CN", Profiles: []Profile{}}, quit: make(chan struct{})}
 	if b, e := os.ReadFile(filepath.Join(dir, "settings.json")); e == nil {
 		if e = json.Unmarshal(b, &a.settings); e != nil {
 			panic(e)
 		}
 	}
+	if b, e := os.ReadFile(filepath.Join(dir, "proxy-backup.json")); e == nil {
+		var backup proxyRecord
+		if json.Unmarshal(b, &backup) == nil {
+			a.settings.ProxyBackup = &backup.Backup
+		}
+	}
 	if a.settings.ProxyBackup != nil {
-		if e := platform.WriteProxy(*a.settings.ProxyBackup); e != nil {
+		if e := a.restoreProxy(); e != nil {
 			panic(e)
 		}
 		a.settings.ProxyBackup = nil
+		os.Remove(filepath.Join(dir, "proxy-backup.json"))
 		a.save()
 	}
 	// Discover manually provisioned profiles as well as UI imports.
@@ -530,6 +577,13 @@ func main() {
 		}
 		if !found {
 			a.settings.Profiles = append(a.settings.Profiles, Profile{ID: id, Name: id, Type: "local", Updated: time.Now(), Enabled: len(a.settings.Profiles) == 0})
+		}
+	}
+	for _, arg := range os.Args[1:] {
+		if strings.HasPrefix(arg, "singboxwin:") {
+			if e := a.importLink(arg); e != nil {
+				a.lastError = e.Error()
+			}
 		}
 	}
 	a.save()
@@ -568,7 +622,7 @@ func main() {
 		a.mu.Unlock()
 	}
 	if os.Getenv("SINGBOX_NO_BROWSER") == "" {
-		if e := platform.OpenUI(base); e != nil {
+		if e := platform.OpenUI(base + map[bool]string{true: "/#Profiles", false: ""}[len(os.Args) > 1]); e != nil {
 			a.WriteMessage(blog.LevelWarn, "打开浏览器失败: "+e.Error())
 		}
 	}
