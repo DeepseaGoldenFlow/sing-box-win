@@ -9,7 +9,7 @@
     <aside>
       <h2>sing-box <small>Windows</small></h2>
       <nav></nav>
-      <footer><span data-i18n="关闭窗口后继续运行">关闭窗口后继续运行</span><button id="quit"><span data-i18n="退出客户端">退出客户端</span></button></footer>
+      <footer><button id="quit"><span data-i18n="退出客户端">退出客户端</span></button></footer>
     </aside>
     <main>
       <header>
@@ -20,14 +20,14 @@
       <section id="Dashboard">
         <div class="card" id="statusCard">
           <div class="statusTop">
-            <div class="statusInfo"><div class="statusLabel" id="connectionState">0</div><h2 id="profile">尚未选择配置</h2><button id="chooseProfile" data-i18n="chooseProfile">去选择配置</button></div>
+            <div class="statusInfo"><div class="statusLabel" id="connectionState">已停止</div><h2 id="profile">尚未选择配置</h2><button id="chooseProfile" class="primary" data-i18n="chooseProfile">去选择配置</button></div>
             <div class="statusActions">
-              <button class="primary" data-core="start" data-i18n="启动">启动</button>
+              <button id="btn-start" disabled data-core="start" data-i18n="启动">启动</button>
               <button data-core="stop" data-i18n="停止">停止</button>
               <button data-core="restart" data-i18n="重启">重启</button>
             </div>
           </div>
-          <div class="proxyRow"><label><input type="checkbox" id="proxy" /><span data-i18n="系统代理">系统代理</span></label><p data-i18n="TUN 模式待支持 · 关闭窗口后继续运行">TUN 模式待支持 · 关闭窗口后继续运行</p></div>
+          <div class="proxyRow"><label><input type="checkbox" id="proxy" /><span data-i18n="系统代理">系统代理</span></label><p data-i18n="TUN 模式待支持">TUN 模式待支持</p></div>
         </div>
         <div class="metrics">
           <article><span class="metricIcon upload" data-arrow="up"></span><span data-i18n="upload">上传速度</span><strong id="up">0 B/s</strong></article>
@@ -41,7 +41,7 @@
             <div class="plot"><svg id="chart" viewBox="0 0 800 160" preserveAspectRatio="none" aria-hidden="true">
               <polyline id="upLine" fill="none" stroke="#FF9F0A" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
               <polyline id="downLine" fill="none" stroke="#30D158" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
-            </svg><div id="chartEmpty" data-i18n="trafficEmpty">暂无流量数据，启动后开始采样</div></div>
+            </svg><div id="chartEmpty"><span data-i18n="trafficEmpty">暂无流量数据，启动后开始采样</span><button id="chartEmptyAction" data-i18n="chooseProfile">去选择配置</button></div></div>
             <div class="xAxis"><span>60s</span><span>50s</span><span>40s</span><span>30s</span><span>20s</span><span>10s</span><span>0s</span></div>
           </div>
           <p id="totals"><span data-i18n="累计上传 0 B / 累计下载 0 B">累计上传 0 B / 累计下载 0 B</span></p>
@@ -103,7 +103,7 @@
         <button id="clearLogs" data-i18n="clear">清空</button><pre id="logs"></pre>
       </section>
       <section id="Settings" hidden>
-        <form id="settings" class="card">
+        <p data-i18n="关闭窗口后继续运行">关闭窗口后继续运行</p><form id="settings" class="card">
           <h2><span data-i18n="客户端设置">客户端设置</span></h2>
           <label><input type="checkbox" name="auto_start" /><span data-i18n="开机自启">开机自启</span></label
           ><label
