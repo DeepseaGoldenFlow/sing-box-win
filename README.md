@@ -1,3 +1,5 @@
+> ⚠️ **非官方客户端 / Unofficial client** — 本项目是第三方基于 [sing-box](https://github.com/SagerNet/sing-box) 内核开发的 Windows 原生图形客户端，**与 SagerNet 官方无任何关联**。sing-box / sing-box-for-apple 版权归 SagerNet 所有。本项目以 **GPL-3.0** 许可证开源。
+
 # sing-box for Windows
 
 sing-box for Windows 是纯 Go 单进程客户端：界面是原生 WinUI 3（`native/SingBoxWin.Native`），引擎始终以 `--headless` 提供 HTTP API，仅监听 `127.0.0.1` 随机端口；关闭窗口后后端继续运行。在 UI 点击「退出」可停止内核、恢复代理并退出。

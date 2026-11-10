@@ -1,3 +1,8 @@
 /build/
 *.exe
 node_modules/
+obj/
+bin/
+*.user
+*.dmp
+*.log
