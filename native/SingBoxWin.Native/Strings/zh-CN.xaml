@@ -17,7 +17,7 @@
  <x:String x:Key="Traffic">实时流量 · 最近 60 秒</x:String>
  <x:String x:Key="TotalUpload">累计上传</x:String>
  <x:String x:Key="TotalDownload">累计下载</x:String>
- <x:String x:Key="Import">导入配置</x:String>
+ <x:String x:Key="Import">导入订阅</x:String>
  <x:String x:Key="Name">名称</x:String>
  <x:String x:Key="URL">订阅 URL</x:String>
  <x:String x:Key="Cancel">取消</x:String>
@@ -31,7 +31,7 @@
  <x:String x:Key="BasicPage">基础列表 · 更多操作将在后续版本提供</x:String>
  <x:String x:Key="CloseAll">全部关闭</x:String>
  <x:String x:Key="ConnectionColumns">主机 / 网络 / 上传 / 下载 / 时长</x:String>
- <x:String x:Key="Empty">暂无连接</x:String>
+ <x:String x:Key="Empty">暂无活动连接</x:String>
  <x:String x:Key="AllLevels">全部级别</x:String>
  <x:String x:Key="AutoScroll">自动滚动</x:String>
  <x:String x:Key="ToolSource">本页数据来自引擎 GET /api/tools/tailscale</x:String>
@@ -41,8 +41,8 @@
  <x:String x:Key="Hostname">主机名</x:String>
  <x:String x:Key="TailnetIP">Tailnet IP</x:String>
  <x:String x:Key="KeyExpiry">密钥到期</x:String>
- <x:String x:Key="LastSync">最后同步</x:String>
- <x:String x:Key="Test">测试连通</x:String>
+ <x:String x:Key="LastSync">最近握手时间</x:String>
+ <x:String x:Key="Test">测试连通性</x:String>
  <x:String x:Key="Unsupported">暂未支持</x:String>
  <x:String x:Key="AutoStart">开机自启</x:String>
  <x:String x:Key="AutoConnect">自动连接</x:String>
@@ -59,4 +59,8 @@
  <x:String x:Key="OpenData">打开数据目录</x:String>
  <x:String x:Key="Quit">退出程序</x:String>
  <x:String x:Key="Retry">重新连接引擎</x:String>
+ <x:String x:Key="EmptyHint">启动引擎并产生流量后，活动连接将在此显示。</x:String>
+ <x:String x:Key="WaitingTraffic">等待流量…</x:String>
+ <x:String x:Key="NoTail">未检测到 Tailscale 端点，或端点元数据尚不完整。</x:String>
+ <x:String x:Key="HandshakeHint">当前引擎仅提供缓存同步时间，未提供握手时间。</x:String>
 </ResourceDictionary>

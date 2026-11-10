@@ -12,7 +12,7 @@ public sealed class EngineClient
     public async Task ConnectAsync()
     {
         if (await ProbeAsync()) return;
-        var candidates = new[] { Path.Combine(AppContext.BaseDirectory, "..", "sing-box-win.exe"), Path.Combine(AppContext.BaseDirectory, "sing-box-win.exe"), Path.GetFullPath("build/sing-box-win.exe") };
+        var candidates = new[] { Path.Combine(AppContext.BaseDirectory, "sing-box-win.exe"), Path.Combine(AppContext.BaseDirectory, "..", "sing-box-win.exe"), Path.GetFullPath("build/sing-box-win.exe") };
         string exe = candidates.FirstOrDefault(File.Exists) ?? throw new FileNotFoundException("build\\sing-box-win.exe");
         Process.Start(new ProcessStartInfo(exe, "--headless") { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(exe))! });
         var until = DateTime.UtcNow.AddSeconds(10);

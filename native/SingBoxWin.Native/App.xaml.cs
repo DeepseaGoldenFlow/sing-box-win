@@ -6,7 +6,19 @@ public partial class App : Application
     private Mutex? instance;
     private EventWaitHandle? activation;
     private MainWindow? window;
-    public App() { InitializeComponent(); }
+    private static void WriteError(object? error)
+    {
+        try {
+            System.IO.Directory.CreateDirectory(EngineClient.DataDir);
+            System.IO.File.AppendAllText(System.IO.Path.Combine(EngineClient.DataDir, "native-error.log"), $"{DateTimeOffset.Now:O} {error}{Environment.NewLine}");
+        } catch { }
+    }
+    public App()
+    {
+        UnhandledException += (_, e) => WriteError(e.Exception);
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => WriteError(e.ExceptionObject);
+        InitializeComponent();
+    }
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         instance = new Mutex(true, @"Global\SingBoxWinNative", out bool first);

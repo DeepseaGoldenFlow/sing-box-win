@@ -1,3 +1,8 @@
 <Application x:Class="SingBoxWin.Native.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
- <Application.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Application.Resources>
+ <Application.Resources><ResourceDictionary><ResourceDictionary.ThemeDictionaries>
+      <ResourceDictionary x:Key="Dark"><SolidColorBrush x:Key="ShellBrush" Color="#1C1C1E"/><SolidColorBrush x:Key="CardBrush" Color="#2C2C2E"/><SolidColorBrush x:Key="EdgeBrush" Color="#3A3A3C"/></ResourceDictionary>
+      <ResourceDictionary x:Key="Light"><SolidColorBrush x:Key="ShellBrush" Color="#F2F2F7"/><SolidColorBrush x:Key="CardBrush" Color="White"/><SolidColorBrush x:Key="EdgeBrush" Color="#D1D1D6"/></ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+    <Color x:Key="SystemAccentColor">#0A84FF</Color>
+    <ResourceDictionary.MergedDictionaries><XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Application.Resources>
 </Application>

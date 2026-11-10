@@ -1,25 +1,34 @@
 <Window x:Class="SingBoxWin.Native.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
  <Grid x:Name="Root" Background="{ThemeResource ShellBrush}" RequestedTheme="Dark">
-  <Grid.Resources>
-   <ResourceDictionary><ResourceDictionary.ThemeDictionaries>
-    <ResourceDictionary x:Key="Dark"><SolidColorBrush x:Key="ShellBrush" Color="#1C1C1E"/><SolidColorBrush x:Key="CardBrush" Color="#2C2C2E"/><SolidColorBrush x:Key="EdgeBrush" Color="#3A3A3C"/></ResourceDictionary>
-    <ResourceDictionary x:Key="Light"><SolidColorBrush x:Key="ShellBrush" Color="#F2F2F7"/><SolidColorBrush x:Key="CardBrush" Color="White"/><SolidColorBrush x:Key="EdgeBrush" Color="#D1D1D6"/></ResourceDictionary>
-   </ResourceDictionary.ThemeDictionaries>
-   <Color x:Key="SystemAccentColor">#0A84FF</Color>
-   </ResourceDictionary>
-  </Grid.Resources>
   <Grid.RowDefinitions><RowDefinition Height="44"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-  <Grid x:Name="TitleBar" Margin="18,0,150,0"><TextBlock Text="sing-box · Windows" VerticalAlignment="Center" FontSize="13"/></Grid>
+  <Grid x:Name="TitleBar" Margin="20,0,150,0"><TextBlock Text="sing-box" FontWeight="SemiBold" VerticalAlignment="Center" FontSize="13"/></Grid>
   <NavigationView x:Name="Nav" Grid.Row="1" PaneDisplayMode="Left" IsSettingsVisible="False" IsBackButtonVisible="Collapsed" IsPaneToggleButtonVisible="False" OpenPaneLength="196" AlwaysShowHeader="False" FontFamily="Segoe UI Variable Text, Microsoft YaHei UI">
    <NavigationView.Resources>
-    <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#240A84FF"/>
-    <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#340A84FF"/>
-    <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="White"/>
-    <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="#0A84FF"/>
+    <ResourceDictionary>
+     <ResourceDictionary.ThemeDictionaries>
+      <ResourceDictionary x:Key="Dark">
+       <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#14FFFFFF"/>
+       <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#14FFFFFF"/>
+       <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#0AFFFFFF"/>
+      </ResourceDictionary>
+      <ResourceDictionary x:Key="Light">
+       <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#0D000000"/>
+       <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#0D000000"/>
+       <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#0A000000"/>
+      </ResourceDictionary>
+     </ResourceDictionary.ThemeDictionaries>
+     <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="#0A84FF"/>
+     <x:Double x:Key="NavigationViewItemOnLeftMinHeight">36</x:Double>
+     <x:Double x:Key="NavigationViewItemOnLeftIconBoxHeight">16</x:Double>
+     <x:Double x:Key="NavigationViewSelectionIndicatorWidth">3</x:Double>
+     <x:Double x:Key="NavigationViewSelectionIndicatorRadius">2</x:Double>
+     <Thickness x:Key="NavigationViewItemContentPresenterMargin">0</Thickness>
+     <Thickness x:Key="NavigationViewItemButtonMargin">4</Thickness>
+    </ResourceDictionary>
    </NavigationView.Resources>
-   <Grid Padding="28,18,28,28"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+   <Grid Padding="28,20,28,28"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
     <InfoBar x:Name="Notice" IsOpen="False" Severity="Error" IsClosable="True" Margin="0,0,0,16"/>
-    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" Margin="0,0,0,20"><TextBlock x:Name="Heading" FontSize="26" FontWeight="SemiBold"/><ProgressRing x:Name="Busy" Width="22" Height="22" IsActive="False"/></StackPanel>
+    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" Margin="0,0,0,20"><TextBlock x:Name="Heading" FontSize="26" FontWeight="SemiBold"/><ProgressRing x:Name="Busy" Width="24" Height="24" IsActive="False"/></StackPanel>
     <Frame x:Name="ContentFrame" Grid.Row="2"/>
    </Grid>
   </NavigationView>

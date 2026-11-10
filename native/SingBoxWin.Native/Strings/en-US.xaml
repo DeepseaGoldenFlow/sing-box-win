@@ -17,7 +17,7 @@
  <x:String x:Key="Traffic">Traffic · Last 60 seconds</x:String>
  <x:String x:Key="TotalUpload">Total upload</x:String>
  <x:String x:Key="TotalDownload">Total download</x:String>
- <x:String x:Key="Import">Import profile</x:String>
+ <x:String x:Key="Import">Import subscription</x:String>
  <x:String x:Key="Name">Name</x:String>
  <x:String x:Key="URL">Subscription URL</x:String>
  <x:String x:Key="Cancel">Cancel</x:String>
@@ -31,7 +31,7 @@
  <x:String x:Key="BasicPage">Basic list · More actions in a future release</x:String>
  <x:String x:Key="CloseAll">Close all</x:String>
  <x:String x:Key="ConnectionColumns">Host / Network / Upload / Download / Duration</x:String>
- <x:String x:Key="Empty">No connections</x:String>
+ <x:String x:Key="Empty">No active connections</x:String>
  <x:String x:Key="AllLevels">All levels</x:String>
  <x:String x:Key="AutoScroll">Auto scroll</x:String>
  <x:String x:Key="ToolSource">Source: engine GET /api/tools/tailscale</x:String>
@@ -41,7 +41,7 @@
  <x:String x:Key="Hostname">Hostname</x:String>
  <x:String x:Key="TailnetIP">Tailnet IP</x:String>
  <x:String x:Key="KeyExpiry">Key expiry</x:String>
- <x:String x:Key="LastSync">Last sync</x:String>
+ <x:String x:Key="LastSync">Last handshake</x:String>
  <x:String x:Key="Test">Test connectivity</x:String>
  <x:String x:Key="Unsupported">Not supported yet</x:String>
  <x:String x:Key="AutoStart">Launch at sign-in</x:String>
@@ -59,4 +59,8 @@
  <x:String x:Key="OpenData">Open data folder</x:String>
  <x:String x:Key="Quit">Quit</x:String>
  <x:String x:Key="Retry">Retry engine connection</x:String>
+ <x:String x:Key="EmptyHint">Start the engine and generate traffic to see active connections.</x:String>
+ <x:String x:Key="WaitingTraffic">Waiting for traffic…</x:String>
+ <x:String x:Key="NoTail">No Tailscale endpoint detected, or endpoint metadata is incomplete.</x:String>
+ <x:String x:Key="HandshakeHint">The engine provides cache sync time only; handshake time is unavailable.</x:String>
 </ResourceDictionary>
