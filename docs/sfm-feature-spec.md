@@ -1,6 +1,8 @@
 # SFM 功能规格（sing-box for Apple）— Windows 客户端开发规格
 
-> 结论先行：SFM 的**主框架是「左侧导航 + Dashboard 卡片网格」**，导航只有 5 项：**Dashboard / Groups / Connections / Logs / Tools / Settings**（Groups、Connections 仅在服务运行且存在分组/连接时才出现）。**没有独立的 Profiles 页面**——配置（Profile）通过 Dashboard 上的 Profile 卡片 + Profile 选择弹窗管理。SFM 是 Apple Network Extension/系统代理专用实现，很多「端口 / DNS / 允许局域网」并不是 App 级开关，而是**写进配置文件的字段**；Windows 端需要把这些从「配置文件层」提升为 UI（下文逐条标注）。
+> 注意：下文勾选代表 SFM 的能力清单，不代表 SFW 已完成。当前实现与验收缺口以 [SFW 整体审查](sfw-sfm-parity-audit.md) 为准。
+
+> 结论先行：SFM 的**主框架是「左侧导航 + Dashboard 卡片网格」**，导航只有 6 项：**Dashboard / Groups / Connections / Logs / Tools / Settings**（Groups、Connections 仅在服务运行且存在分组/连接时才出现）。**没有独立的 Profiles 页面**——配置（Profile）通过 Dashboard 上的 Profile 卡片 + Profile 选择弹窗管理。SFM 是 Apple Network Extension/系统代理专用实现，很多「端口 / DNS / 允许局域网」并不是 App 级开关，而是**写进配置文件的字段**；Windows 端需要把这些从「配置文件层」提升为 UI（下文逐条标注）。
 >
 > 所有 [已证实] 项均来自对 SagerNet/sing-box-for-apple（dev 分支）源码与 Info.plist 的直接阅读；[推断] 项为基于源码结构的合理外推或 Apple 平台特有、Windows 需另行设计的部分。
 

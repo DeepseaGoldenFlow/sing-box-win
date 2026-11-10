@@ -2,7 +2,11 @@ $ErrorActionPreference = 'Stop'
 Push-Location (Split-Path $PSScriptRoot -Parent)
 try {
     Write-Host '[1/4] Building native client (Release, self-contained win-x64)...'
-    dotnet build native\SingBoxWin.Native\SingBoxWin.Native.csproj -c Release -r win-x64 -p:Platform=x64 -p:SelfContained=true -p:WindowsAppSDKSelfContained=true
+    # WinUI PRI packaging tasks require Visual Studio MSBuild on this machine.
+    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+    $msbuild = if (Test-Path $vswhere) { & $vswhere -latest -products '*' -find 'MSBuild\**\Bin\amd64\MSBuild.exe' | Select-Object -First 1 }
+    if (!$msbuild) { throw 'Visual Studio MSBuild with Windows App SDK build tools is required.' }
+    & $msbuild native\SingBoxWin.Native\SingBoxWin.Native.csproj /restore /p:Configuration=Release /p:RuntimeIdentifier=win-x64 /p:Platform=x64 /p:SelfContained=true /p:WindowsAppSDKSelfContained=true /v:minimal /nologo
     if ($LASTEXITCODE -ne 0) { throw "Native build failed: $LASTEXITCODE" }
     $output = 'native\SingBoxWin.Native\bin\x64\Release\net8.0-windows10.0.19041.0\win-x64'
     if (!(Test-Path "$output\SingBoxWin.Native.exe")) { throw "Native output missing: $output" }

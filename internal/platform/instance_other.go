@@ -3,7 +3,6 @@
 package platform
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -25,4 +24,10 @@ func SingleInstance(dir string) (func(), bool, error) {
 	}
 	return func() { f.Close() }, true, nil
 }
-func RegisterProtocol(bool) error { return fmt.Errorf("protocol registration requires Windows") }
+
+// Registry-free platforms accept the same toggles as no-ops so the engine code
+// path is identical everywhere. Actual Windows registration is verified on
+// Windows by JARVIS; see platform_registry_windows.go.
+func RegisterProtocol(bool) error         { return nil }
+func RegisterFileAssociations(bool) error { return nil }
+func HandlerPaths() []string              { return nil }

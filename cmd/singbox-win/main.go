@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -11,9 +12,11 @@ import (
 	"github.com/JARVIS/sing-box-win/internal/config"
 	"github.com/JARVIS/sing-box-win/internal/platform"
 	box "github.com/sagernet/sing-box"
+	"github.com/sagernet/sing-box/adapter"
 	blog "github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json/badoption"
+	"github.com/sagernet/sing/service"
 	"io"
 	"math"
 	"net"
@@ -23,6 +26,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -30,18 +34,21 @@ import (
 	"time"
 )
 
-const version = "0.4.2"
+const version = "0.6.0"
 
 type Profile struct {
-	ID      string    `json:"id"`
-	Name    string    `json:"name"`
-	Type    string    `json:"type"`
-	URL     string    `json:"url,omitempty"`
-	Updated time.Time `json:"updated"`
-	Enabled bool      `json:"enabled"`
+	AutoUpdate    *bool     `json:"auto_update,omitempty"`
+	UpdateMinutes int       `json:"update_minutes,omitempty"`
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Type          string    `json:"type"`
+	URL           string    `json:"url,omitempty"`
+	Updated       time.Time `json:"updated"`
+	Enabled       bool      `json:"enabled"`
 }
 type Settings struct {
 	AutoStart   bool                  `json:"auto_start"`
+	AutoProxy   *bool                 `json:"auto_proxy"`
 	AutoConnect bool                  `json:"auto_connect"`
 	UpdateHours int                   `json:"update_hours"`
 	Port        int                   `json:"port"`
@@ -57,22 +64,26 @@ type Log struct {
 	Message string `json:"message"`
 }
 type App struct {
-	logStreamCancel context.CancelFunc
-	nativeLogs      []Log
-	mu              sync.Mutex
-	logMu           sync.Mutex
-	dir             string
-	settings        Settings
-	core            *box.Box
-	logs            []Log
-	lastError       string
-	clash           string
-	secret          string
-	proxy           bool
-	quit            chan struct{}
-	trafficTime     time.Time
-	uploadTotal     float64
-	downloadTotal   float64
+	connectionManager adapter.ConnectionManager
+	endpointMu        sync.RWMutex
+	endpointStates    map[string]endpointSnapshot
+	endpointCancel    context.CancelFunc
+	logStreamCancel   context.CancelFunc
+	nativeLogs        []Log
+	mu                sync.Mutex
+	logMu             sync.Mutex
+	dir               string
+	settings          Settings
+	core              *box.Box
+	logs              []Log
+	lastError         string
+	clash             string
+	secret            string
+	proxy             bool
+	quit              chan struct{}
+	trafficTime       time.Time
+	uploadTotal       float64
+	downloadTotal     float64
 }
 
 func (a *App) WriteMessage(level blog.Level, msg string) {
@@ -105,6 +116,7 @@ func (a *App) save() error {
 func (a *App) profilePath(id string) string { return filepath.Join(a.dir, "profiles", id+".json") }
 func id() string                            { var b [16]byte; _, _ = rand.Read(b[:]); return hex.EncodeToString(b[:]) }
 func (a *App) stop() error {
+	a.stopEndpointStatus()
 	if a.logStreamCancel != nil {
 		a.logStreamCancel()
 		a.logStreamCancel = nil
@@ -177,7 +189,11 @@ func (a *App) start() error {
 	if opt.Experimental == nil {
 		opt.Experimental = &option.ExperimentalOptions{}
 	}
-	opt.Experimental.ClashAPI = &option.ClashAPIOptions{ExternalController: strings.TrimPrefix(a.clash, "http://"), Secret: a.secret}
+	if opt.Experimental.ClashAPI == nil {
+		opt.Experimental.ClashAPI = &option.ClashAPIOptions{}
+	}
+	opt.Experimental.ClashAPI.ExternalController = strings.TrimPrefix(a.clash, "http://")
+	opt.Experimental.ClashAPI.Secret = a.secret
 	native := a.nativeOptions()
 	if native.MemoryLimitMB > 0 {
 		debug.SetMemoryLimit(native.MemoryLimitMB * 1024 * 1024)
@@ -185,7 +201,8 @@ func (a *App) start() error {
 		debug.SetMemoryLimit(math.MaxInt64)
 	}
 	opt.Log = &option.LogOptions{Level: native.LogLevel, Timestamp: true, DisableColor: false}
-	instance, e := box.New(box.Options{Options: opt, Context: config.Context(), PlatformLogWriter: a})
+	coreContext := config.Context()
+	instance, e := box.New(box.Options{Options: opt, Context: coreContext, PlatformLogWriter: a})
 	if e != nil {
 		return e
 	}
@@ -194,9 +211,19 @@ func (a *App) start() error {
 		return e
 	}
 	a.core = instance
+	a.connectionManager = service.FromContext[adapter.ConnectionManager](coreContext)
+	a.startEndpointStatus()
 	a.startLogStream()
 	a.trafficTime = time.Time{}
 	a.lastError = ""
+	// Missing preference on existing installs defaults to browser-ready starts.
+	if runtime.GOOS == "windows" && (a.settings.AutoProxy == nil || *a.settings.AutoProxy) {
+		if err := a.setProxy(true); err != nil {
+			_ = a.stop()
+			a.lastError = "System proxy: " + err.Error()
+			return errors.New(a.lastError)
+		}
+	}
 	return nil
 }
 func (a *App) setProxy(on bool) error {
@@ -269,14 +296,7 @@ func (a *App) refresh(p *Profile) error {
 	if e != nil {
 		return e
 	}
-	if _, e = config.Parse(b); e != nil {
-		return e
-	}
-	if e = os.WriteFile(a.profilePath(p.ID), b, 0600); e != nil {
-		return e
-	}
-	p.Updated = time.Now()
-	return a.save()
+	return a.replaceProfile(p, b)
 }
 func (a *App) clashCall(method, path string) (any, error) {
 	if a.core == nil {
@@ -312,19 +332,55 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch {
 	case r.URL.Path == "/api/activate" && r.Method == "POST":
-		var b struct{ Link string }
+		var b activationPayload
 		err = decode(r, &b)
 		if err == nil && b.Link != "" {
 			err = a.importLink(b.Link)
+		} else if err == nil && b.Path != "" {
+			_, err = a.importProfileFile(b.Path)
+		}
+		if err != nil {
+			// The second process just shows this error and exits; record it so the
+			// already-running UI explains what went wrong with the clicked link/file.
+			a.lastError = truncateError(err)
 		}
 	case r.URL.Path == "/api/protocol" && r.Method == "POST":
 		var b struct{ Enabled bool }
 		if err = decode(r, &b); err == nil {
 			err = platform.RegisterProtocol(b.Enabled)
 		}
+		if err == nil {
+			err = platform.RegisterFileAssociations(b.Enabled)
+		}
+	case (r.URL.Path == "/api/profiles/import/file" || r.URL.Path == "/api/profiles/import/bpf") && r.Method == "POST":
+		// The native client cannot hand the engine a path to a file it opened
+		// inside the FileOpenPicker (that is a broker handle), so it reads bytes
+		// and posts them base64-encoded. Content decides the format, as for paths,
+		// and "name" overrides the name derived from the file.
+		var b struct {
+			Name string `json:"name"`
+			Path string `json:"path"`
+			Data string `json:"data"` // base64 container bytes
+		}
+		if err = decode(r, &b); err != nil {
+			break
+		}
+		var data []byte
+		if strings.TrimSpace(b.Data) != "" {
+			data, err = base64.StdEncoding.DecodeString(strings.TrimSpace(b.Data))
+		} else if strings.TrimSpace(b.Path) != "" {
+			result, err = a.importProfileFile(b.Path)
+			break
+		} else {
+			err = errors.New("请选择要导入的文件")
+		}
+		if err == nil {
+			result, err = a.importProfileBytes(data, b.Name)
+		}
 	case r.URL.Path == "/api/logs" && r.Method == "DELETE":
 		a.logMu.Lock()
 		a.logs = nil
+		a.nativeLogs = nil
 		a.logMu.Unlock()
 	case r.URL.Path == "/api/node/list" && r.Method == "GET":
 		result, err = a.nodeList()
@@ -333,12 +389,33 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		if err = decode(r, &b); err == nil {
 			err = a.selectNode(b.Group, b.Name)
 		}
+	case r.URL.Path == "/api/tools/endpoints" && r.Method == "GET":
+		result, err = a.liveEndpoints()
+	case r.URL.Path == "/api/tools/tailscale/exit-node" && r.Method == "POST":
+		var b struct {
+			Tag string `json:"tag"`
+			ID  string `json:"id"`
+		}
+		if err = decode(r, &b); err == nil {
+			err = a.setEndpointExit(b.Tag, b.ID)
+		}
 	case r.URL.Path == "/api/tools/tailscale" && r.Method == "GET":
 		result = a.tailscaleStatus()
 	case r.URL.Path == "/api/tools/tailscale/test" && r.Method == "POST":
 		result = a.testTailscale()
+	case r.URL.Path == "/api/tools/connectivity" && r.Method == "POST":
+		result = a.testConnectivity("https://www.google.com/generate_204")
 	case r.URL.Path == "/api/tools/info" && r.Method == "GET":
 		result = a.toolsInfo()
+	case r.URL.Path == "/api/routing" && r.Method == "GET":
+		result, err = a.routingInfo()
+	case r.URL.Path == "/api/routing" && r.Method == "POST":
+		var b struct {
+			Mode string `json:"mode"`
+		}
+		if err = decode(r, &b); err == nil {
+			err = a.setRoutingMode(b.Mode)
+		}
 	case r.URL.Path == "/api/state" && r.Method == "GET":
 		name := ""
 		for _, p := range a.settings.Profiles {
@@ -354,8 +431,12 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		case "stop":
 			err = a.stop()
 		case "restart":
+			proxy := a.proxy
 			if err = a.stop(); err == nil {
 				err = a.start()
+				if err == nil {
+					err = a.setProxy(proxy)
+				}
 			}
 		default:
 			err = errors.New("未知操作")
@@ -374,14 +455,19 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		if err = decode(r, &b); err != nil {
 			break
 		}
+		// A path may point at JSON or BPF; content decides, matching file import.
+		// A supplied name wins over the file name, and uniqueProfileName keeps it
+		// from colliding with an existing profile.
+		if b.URL == "" && b.Path != "" {
+			result, err = a.importProfilePath(b.Path, b.Name)
+			break
+		}
 		var data []byte
 		typ := "local"
 		switch {
 		case b.URL != "":
 			data, err = fetch(b.URL)
 			typ = "remote"
-		case b.Path != "":
-			data, err = os.ReadFile(b.Path)
 		default:
 			data = []byte(b.Content)
 		}
@@ -394,13 +480,13 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		if strings.TrimSpace(b.Name) == "" {
 			b.Name = "新配置"
 		}
-		p := Profile{ID: id(), Name: b.Name, URL: b.URL, Type: typ, Updated: time.Now(), Enabled: len(a.settings.Profiles) == 0}
-		if err = os.WriteFile(a.profilePath(p.ID), data, 0600); err != nil {
-			break
+		imp := profileImport{Name: b.Name, Type: typ, URL: b.URL, Data: data}
+		if typ == "remote" {
+			enabled := true
+			imp.AutoUpdate = &enabled
+			imp.UpdateMinutes = 60
 		}
-		a.settings.Profiles = append(a.settings.Profiles, p)
-		err = a.save()
-		result = p
+		result, err = a.addProfile(imp)
 	case strings.HasPrefix(r.URL.Path, "/api/profiles/"):
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/profiles/"), "/")
 		idx := -1
@@ -416,41 +502,35 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		}
 		p := &a.settings.Profiles[idx]
 		switch {
+		case len(parts) == 2 && parts[1] == "export" && r.Method == "GET":
+			var data []byte
+			var name string
+			data, name, err = a.exportProfile(*p, r.URL.Query().Get("format"))
+			if err != nil {
+				break
+			}
+			// Profile names are usually Chinese; RFC 5987 carries them, and the ASCII
+			// fallback keeps older clients happy. The native client picks its own name.
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Header().Set("Content-Disposition", `attachment; filename="`+asciiFilename(name)+`"; filename*=UTF-8''`+url.PathEscape(name))
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			_, err = w.Write(data)
+			return
 		case len(parts) == 2 && parts[1] == "update" && r.Method == "POST":
 			err = a.refresh(p)
+		case len(parts) == 1 && r.Method == "GET":
+			var data []byte
+			data, err = os.ReadFile(a.profilePath(p.ID))
+			if err == nil {
+				result = map[string]any{"profile": p, "content": string(data)}
+			}
 		case len(parts) == 1 && r.Method == "DELETE":
-			if p.Enabled && a.core != nil {
-				err = errors.New("请先停止内核")
-				break
-			}
-			if err = os.Remove(a.profilePath(p.ID)); err == nil {
-				a.settings.Profiles = append(a.settings.Profiles[:idx], a.settings.Profiles[idx+1:]...)
-				err = a.save()
-			}
+			err = a.deleteProfile(idx)
 		case len(parts) == 1 && r.Method == "PUT":
-			var b struct {
-				Name    *string `json:"name"`
-				Enabled *bool   `json:"enabled"`
+			var b profileEdit
+			if err = decode(r, &b); err == nil {
+				err = a.editProfile(idx, b)
 			}
-			if err = decode(r, &b); err != nil {
-				break
-			}
-			if b.Enabled != nil && a.core != nil {
-				err = errors.New("请先停止内核再切换配置")
-				break
-			}
-			if b.Name != nil && strings.TrimSpace(*b.Name) != "" {
-				p.Name = *b.Name
-			}
-			if b.Enabled != nil {
-				if *b.Enabled {
-					for i := range a.settings.Profiles {
-						a.settings.Profiles[i].Enabled = false
-					}
-				}
-				p.Enabled = *b.Enabled
-			}
-			err = a.save()
 		default:
 			http.Error(w, "method not allowed", 405)
 			return
@@ -516,8 +596,11 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 			result = map[string]any{"upload": upSpeed, "download": downSpeed, "upload_total": up, "download_total": down, "connections": len(connections)}
 		}
 	case strings.HasPrefix(r.URL.Path, "/api/connections") && r.Method == "DELETE":
-		http.Error(w, "closing connections is not implemented", http.StatusNotImplemented)
-		return
+		suffix := strings.TrimPrefix(r.URL.Path, "/api/connections")
+		if suffix != "" {
+			suffix = "/" + url.PathEscape(strings.TrimPrefix(suffix, "/"))
+		}
+		result, err = a.clashCall("DELETE", "/connections"+suffix)
 	case strings.HasPrefix(r.URL.Path, "/api/connections") && r.Method == "GET":
 		suffix := strings.TrimPrefix(r.URL.Path, "/api/connections")
 		result, err = a.clashCall(r.Method, "/connections"+suffix)
@@ -543,7 +626,9 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		a.lastError = string([]rune(err.Error())[:min(500, len([]rune(err.Error())))])
+		if strings.HasPrefix(r.URL.Path, "/api/core/") {
+			a.lastError = truncateError(err)
+		}
 		http.Error(w, err.Error(), 400)
 		return
 	}
@@ -617,8 +702,13 @@ func main() {
 		}
 	}
 	for _, arg := range os.Args[1:] {
-		if strings.HasPrefix(arg, "singboxwin:") {
+		switch {
+		case isDeepLinkArg(arg):
 			if e := a.importLink(arg); e != nil {
+				a.lastError = e.Error()
+			}
+		case fileAssociationArg(arg):
+			if _, e := a.importProfileFile(arg); e != nil {
 				a.lastError = e.Error()
 			}
 		}
@@ -658,7 +748,7 @@ func main() {
 		a.mu.Unlock()
 	}
 	go func() {
-		t := time.NewTicker(time.Hour)
+		t := time.NewTicker(time.Minute)
 		defer t.Stop()
 		for {
 			select {
@@ -668,7 +758,7 @@ func main() {
 				a.mu.Lock()
 				for i := range a.settings.Profiles {
 					p := &a.settings.Profiles[i]
-					if a.settings.UpdateHours > 0 && p.URL != "" && time.Since(p.Updated) >= time.Duration(a.settings.UpdateHours)*time.Hour {
+					if interval := a.updateInterval(*p); interval > 0 && time.Since(p.Updated) >= interval {
 						if e := a.refresh(p); e != nil {
 							a.WriteMessage(blog.LevelError, e.Error())
 						}

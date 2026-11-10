@@ -14,6 +14,10 @@ namespace SingBoxWin.Native;
 public sealed partial class MainWindow : Window
 {
     private readonly EngineClient api = new();
+    private TrayIcon? tray;
+    private ToggleSwitch? systemProxyToggle;
+    private TextBlock? proxyHint;
+    private bool updatingProxy;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly Queue<(double up, double down)> samples = new();
     private ResourceDictionary strings = new();
@@ -29,7 +33,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Title = "sing-box for Windows";
+        Title = "SFW · sing-box for Windows";
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true; SetTitleBar(TitleBar);
         AppWindow.Resize(new SizeInt32(1040, 720));
@@ -52,11 +56,18 @@ public sealed partial class MainWindow : Window
             }
             else
             {
-                AppWindow.Hide();
+                if (tray?.Available == true) AppWindow.Hide();
+                else { Notice.Message = T("Tray unavailable"); Notice.IsOpen = true; }
             }
         };
         try { closeExits = JsonNode.Parse(System.IO.File.ReadAllText(prefsPath))?["close_exits"]?.GetValue<bool>() ?? false; } catch { }
         LoadPreferences();
+        try {
+            tray = new TrayIcon(WinRT.Interop.WindowNative.GetWindowHandle(this), iconPath, ShowWindow,
+                () => _ = TrayAction(() => Core(B(state, "running") ? "stop" : "start")),
+                () => _ = TrayAction(async () => { await api.Call("proxy", HttpMethod.Post, new { enabled = !B(state, "system_proxy") }); }),
+                () => _ = TrayAction(Quit));
+        } catch (Exception ex) { Notice.Message = ex.Message; Notice.IsOpen = true; }
         LoadLanguage("zh-CN");
         Nav.SelectionChanged += (_, _) => { if (!rendering && Nav.SelectedItem is NavigationViewItem item) { page = (string)item.Tag; Render(); _ = Refresh(); } };
         timer.Tick += async (_, _) => await Refresh();
@@ -68,9 +79,11 @@ public sealed partial class MainWindow : Window
         await Run(async () => {
             await api.ConnectAsync(); connected = true;
             var settings = await api.Call("settings");
+            coreLogLevel = S(await api.Call("native/core"),"log_level");
             LoadLanguage(S(settings, "language").StartsWith("en") ? "en-US" : "zh-CN");
             Root.RequestedTheme = S(settings, "theme") switch { "light" => ElementTheme.Light, "system" => ElementTheme.Default, _ => ElementTheme.Dark };
             Render(); timer.Start(); await Refresh();
+            if (Environment.GetCommandLineArgs().Contains("--background") && tray?.Available == true) AppWindow.Hide();
         });
         if (!connected) { var retry = Button(T("Retry"), async () => { await api.ConnectAsync(); connected = true; Render(); timer.Start(); await Refresh(); }); Body().Children.Add(retry); }
     }
@@ -117,7 +130,7 @@ public sealed partial class MainWindow : Window
         button.Opacity = enabled ? 1 : .4;
     }
     private StackPanel Row(params UIElement[] elements) { var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 }; foreach (var element in elements) row.Children.Add(element); return row; }
-    private Border Card(UIElement child) { var c = new Border { Child = child, Padding = new Thickness(20), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1) }; var resources = (ResourceDictionary)Application.Current.Resources.ThemeDictionaries[Root.RequestedTheme == ElementTheme.Light ? "Light" : "Dark"]; c.Background = (Microsoft.UI.Xaml.Media.Brush)resources["CardBrush"]; c.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)resources["EdgeBrush"]; return c; }
+    private Border Card(UIElement child) { var c = new Border { Child = child, Padding = new Thickness(20), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1) }; var resources = (ResourceDictionary)Application.Current.Resources.ThemeDictionaries[Root.ActualTheme == ElementTheme.Light ? "Light" : "Dark"]; c.Background = (Microsoft.UI.Xaml.Media.Brush)resources["CardBrush"]; c.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)resources["EdgeBrush"]; return c; }
     private Button Button(string title, Func<Task> action, bool primary = false)
     {
         var button = new Button { Content = title };
@@ -155,12 +168,7 @@ public sealed partial class MainWindow : Window
             case "Groups": RenderGroups(body); break;
             case "Connections": RenderConnections(body); break;
             case "Logs": RenderLogs(body); break;
-            case "Tools":
-                var tail = new StackPanel { Spacing = 16 }; tail.Children.Add(Text("Tailscale", 13, "#9A9AA0")); tailStatus = Text(T("Disabled"), 18, "#8E8E93"); tail.Children.Add(tailStatus); tailHint = Text(T("NoTail"), 13, "#9A9AA0"); tail.Children.Add(tailHint);
-                host = Text("—"); ips = Text("—"); expiry = Text("—"); sync = Text("—");
-                foreach (var pair in new[] { ("Hostname", host), ("TailnetIP", ips), ("KeyExpiry", expiry), ("LastSync", sync) }) { var field = new StackPanel { Spacing = 4 }; field.Children.Add(Text(T(pair.Item1), 12, "#8E8E93")); field.Children.Add(pair.Item2); tail.Children.Add(field); }
-                tail.Children.Add(Text(T("HandshakeHint"), 12, "#9A9AA0")); tail.Children.Add(Button(T("Test"), TestTail, true)); testResult = Text(""); tail.Children.Add(testResult); body.Children.Add(Card(tail));
-                foreach (string name in new[] { "Tailscale SSH", "USBIP", "OpenConnect", "OpenVPN" }) { var row = new Grid { Opacity = .45 }; row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); row.Children.Add(Text(name)); var hint = Text(T("Unsupported"), 12, "#8E8E93"); Grid.SetColumn(hint, 1); row.Children.Add(hint); body.Children.Add(Card(row)); } break;
+            case "Tools": RenderEndpointTools(body); break;
             case "Settings": _ = Run(RenderSettings); break;
         }
     }
@@ -170,14 +178,7 @@ public sealed partial class MainWindow : Window
         try { await api.Call("core/" + action, HttpMethod.Post); }
         finally { transition = null; state = await api.Call("state"); UpdateControls(); Render(); }
     }
-    private async Task Import()
-    {
-        var fields = new StackPanel { Spacing = 12 }; var name = new TextBox { Header = T("Name") }; var url = new TextBox { Header = T("URL"), PlaceholderText = "https://" }; fields.Children.Add(name); fields.Children.Add(url);
-        var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = T("Import"), Content = fields, PrimaryButtonText = T("Import"), CloseButtonText = T("Cancel"), DefaultButton = ContentDialogButton.Primary };
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-        if (!Uri.TryCreate(url.Text, UriKind.Absolute, out var uri) || (uri.Scheme != "https" && uri.Scheme != "http")) throw new InvalidOperationException(T("InvalidURL"));
-        await api.Call("profiles/import", HttpMethod.Post, new { name = name.Text, url = url.Text });
-    }
+    private Task Import() => ImportProfileDialog();
     private async Task TestTail()
     {
         JsonNode? result;
@@ -187,29 +188,44 @@ public sealed partial class MainWindow : Window
         testResult.Text = $"HTTP {N(result, "status"):0} · {N(result, "ms"):0} ms" + (B(result, "ok") ? "" : " · " + S(result, "error"));
         testResult.Foreground = Brush(B(result, "ok") ? "#30D158" : "#FF453A");
     }
-    private async Task Quit() { if (connected) await api.Call("quit", HttpMethod.Post); exiting = true; Application.Current.Exit(); }
+    private void ShowWindow() {
+        AppWindow.Show();
+        if (AppWindow.Presenter is OverlappedPresenter presenter) presenter.Restore();
+        Activate(); TrayIcon.SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+    }
+    private async Task TrayAction(Func<Task> action) {
+        if (acting) return;
+        acting = true; await Run(action); acting = false; await Refresh();
+        if (Notice.IsOpen) ShowWindow();
+    }
+    private async Task Quit() {
+        if (connected) await api.Call("quit", HttpMethod.Post);
+        exiting = true; timer.Stop(); tray?.Dispose(); Application.Current.Exit();
+    }
     private async Task Refresh()
     {
-        if (!connected || refreshing || acting) return;
+        if (refreshing || acting) return;
         refreshing = true;
         string requestedPage = page;
+        bool recovering = !connected;
         try {
+            if (!connected) { await api.ConnectAsync(); connected = true; }
             state = await api.Call("state");
+            if (recovering) Notice.IsOpen = false;
             UpdateControls();
+            tray?.Update(B(state, "running"), B(state, "system_proxy"), language == "en-US");
             if (page != requestedPage) return;
             switch (requestedPage) {
                 case "Dashboard": await RefreshDashboard(); break;
                 case "Groups": await RefreshGroups(); break;
-                case "Tools":
-                    var tail = await api.Call("tools/tailscale", missingAllowed: true); if (page != requestedPage || tailStatus is null) break;
-                    tailHint!.Visibility = tail is null || !B(tail, "enabled") || new[] { "hostname", "key_expiry", "last_sync" }.Any(key => S(tail, key) == "") || tail["ips"] is not JsonArray addresses || addresses.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-                    tailStatus.Text = tail?["enabled"] is null ? "—" : T(!B(tail, "enabled") ? "Disabled" : B(tail, "registered") ? "Registered" : "Unregistered"); tailStatus.Foreground = Brush(B(tail, "enabled") && B(tail, "registered") ? "#30D158" : "#8E8E93");
-                    host!.Text = S(tail, "hostname") is "" ? "—" : S(tail, "hostname"); ips!.Text = tail?["ips"] is JsonArray ipArray && ipArray.Count > 0 ? string.Join("\n", ipArray.Select(x => x?.ToString())) : "—"; expiry!.Text = Date(S(tail, "key_expiry")); sync!.Text = "—"; // The API exposes cache sync time, not a handshake timestamp.
-                    break;
+                case "Tools": await RefreshEndpointTools(); break;
                 case "Connections": await RefreshConnections(); break;
                 case "Logs": _ = Run(RefreshLogs); break;
             }
-        } catch (Exception ex) { Notice.Message = ex.Message; Notice.IsOpen = true; }
+        } catch (Exception ex) {
+            if (ex is HttpRequestException or TaskCanceledException) { connected = false; UpdateControls(); }
+            Notice.Message = ex.Message; Notice.IsOpen = true;
+        }
         finally { refreshing = false; }
     }
     private void DrawChart()

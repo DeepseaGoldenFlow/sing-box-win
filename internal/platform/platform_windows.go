@@ -5,6 +5,7 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 	"os"
+	"path/filepath"
 )
 
 const internet = `Software\Microsoft\Windows\CurrentVersion\Internet Settings`
@@ -79,6 +80,10 @@ func AutoStart(on bool) error {
 	exe, e := os.Executable()
 	if e != nil {
 		return e
+	}
+	native := filepath.Join(filepath.Dir(exe), "SingBoxWin.Native.exe")
+	if _, err := os.Stat(native); err == nil {
+		return k.SetStringValue("sing-box-win", `"`+native+`" --background`)
 	}
 	return k.SetStringValue("sing-box-win", `"`+exe+`"`)
 }
