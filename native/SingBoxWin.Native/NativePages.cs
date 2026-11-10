@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Media;
+using System.Linq;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Windows.ApplicationModel.DataTransfer;
@@ -109,29 +110,44 @@ public sealed partial class MainWindow
     }
     private void RenderGroups(StackPanel body)
     {
-        body.Children.Add(Button("URLTest " + T("Groups"), async () => { await api.Call("groups/urltest", HttpMethod.Post); }));
+        body.Children.Add(Button(T("TestLatency"), async () => { await api.Call("groups/urltest", HttpMethod.Post); }));
         groupsPanel = new StackPanel { Spacing = 16 }; body.Children.Add(groupsPanel);
     }
+    private static string StrategyKey(string type) => type switch { "URLTest" => "StrategyURLTest", "Fallback" => "StrategyFallback", "LoadBalance" => "StrategyLoadBalance", "Relay" => "StrategyRelay", "Selector" => "StrategySelector", _ => "StrategyOther" };
     private async Task RefreshGroups()
     {
         var groups = await api.Call("groups") as JsonArray; if (page != "Groups" || groupsPanel is null) return;
         groupsPanel.Children.Clear(); if (groups is null || groups.Count == 0) { groupsPanel.Children.Add(Text(T("No data"))); return; }
         foreach (var g in groups) {
-            string tag = S(g, "tag"); var panel = new StackPanel { Spacing = 8 };
-            panel.Children.Add(Text($"{tag} · {S(g, "type")} · {S(g, "selected")} · {N(g, "delay"):0}ms", 16));
+            string tag = S(g, "tag"), type = S(g, "type"), selected = S(g, "selected");
+            bool selector = string.Equals(type, "Selector", StringComparison.OrdinalIgnoreCase);
+            var panel = new StackPanel { Spacing = 8 };
+            var header = new StackPanel { Spacing = 2 };
+            header.Children.Add(Text($"{tag} · {type} · {N(g, "delay"):0} ms{(selected == "" ? "" : " · " + selected)}", 16));
+            header.Children.Add(Text(T(StrategyKey(type)) + (selector ? "" : " · " + T("ReadOnlyGroup")), 12, "#8E8E93"));
+            panel.Children.Add(header);
             if (g?["members"] is JsonArray members) foreach (var m in members) {
-                string name = S(m, "tag"); double delay = N(m, "delay"); bool selected = name == S(g, "selected");
-                var button = Button("", async () => { await api.Call("groups/" + Uri.EscapeDataString(tag) + "/select", HttpMethod.Put, new { outbound = name }); });
+                string name = S(m, "tag"); double delay = N(m, "delay"); bool isNow = name == selected;
                 var memberRow = new Grid();
                 memberRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 memberRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                var label = Text((selected ? "✓ " : "") + name); label.HorizontalAlignment = HorizontalAlignment.Left; label.TextWrapping = TextWrapping.NoWrap; label.TextTrimming = TextTrimming.CharacterEllipsis;
+                var label = Text((isNow ? "✓ " : "") + name); label.HorizontalAlignment = HorizontalAlignment.Left; label.TextWrapping = TextWrapping.NoWrap; label.TextTrimming = TextTrimming.CharacterEllipsis;
                 var latency = Text($"{delay:0} ms"); latency.HorizontalAlignment = HorizontalAlignment.Right; latency.Opacity = .7; latency.Margin = new Thickness(12, 0, 0, 0);
                 Grid.SetColumn(label, 0); Grid.SetColumn(latency, 1); memberRow.Children.Add(label); memberRow.Children.Add(latency);
-                button.Content = memberRow; button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-                button.Foreground = Brush(delay == 0 ? "#8E8E93" : delay < 800 ? "#30D158" : delay <= 1500 ? "#FF9F0A" : "#FF453A");
-                if (selected) { button.BorderThickness = new Thickness(1); button.BorderBrush = Brush("#30D158"); }
-                button.HorizontalAlignment = HorizontalAlignment.Stretch; Enable(button, Session.IsConnectedStrict && !selected); panel.Children.Add(button);
+                var line = Brush(delay == 0 ? "#8E8E93" : delay < 800 ? "#30D158" : delay <= 1500 ? "#FF9F0A" : "#FF453A");
+                if (selector) {
+                    // Selector: clicking picks the node (PUT /api/groups/{tag}/select).
+                    var button = Button("", async () => { await api.Call("groups/" + Uri.EscapeDataString(tag) + "/select", HttpMethod.Put, new { outbound = name }); });
+                    button.Content = memberRow; button.HorizontalContentAlignment = HorizontalAlignment.Stretch; button.Foreground = line;
+                    if (isNow) { button.BorderThickness = new Thickness(1); button.BorderBrush = Brush("#30D158"); }
+                    button.HorizontalAlignment = HorizontalAlignment.Stretch; Enable(button, Session.IsConnectedStrict && !isNow); panel.Children.Add(button);
+                } else {
+                    // Automatic group (URLTest/Fallback/LoadBalance/Relay): read-only, no request on click.
+                    foreach (var child in memberRow.Children.ToArray()) if (child is TextBlock block) block.Foreground = line;
+                    var row = new Border { Child = memberRow, Padding = new Thickness(10, 8, 10, 8), CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(isNow ? 1 : 0), BorderBrush = Brush("#30D158"), Opacity = Session.IsConnectedStrict ? 1 : .55 };
+                    if (isNow) row.Background = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(0x20, 0x30, 0xD1, 0x58));
+                    panel.Children.Add(row);
+                }
             }
             groupsPanel.Children.Add(Card(panel));
         }
