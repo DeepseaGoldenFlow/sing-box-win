@@ -11,9 +11,9 @@
     <Product>sing-box for Windows</Product>
     <FileDescription>sing-box for Windows</FileDescription>
     <Company>JARVIS</Company>
-    <Version>0.4.0</Version>
-    <AssemblyVersion>0.4.0.0</AssemblyVersion>
-    <FileVersion>0.4.0.0</FileVersion>
+    <Version>0.4.1</Version>
+    <AssemblyVersion>0.4.1.0</AssemblyVersion>
+    <FileVersion>0.4.1.0</FileVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>
@@ -31,4 +31,7 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250205002" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
   </ItemGroup>
+  <Target Name="FixOriginalFilename" AfterTargets="Build" Condition="'$(OS)' == 'Windows_NT' and Exists('$(TargetPath)')">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\build\fix-original-filename.ps1&quot; -Path &quot;$(TargetPath)&quot;" />
+  </Target>
 </Project>
