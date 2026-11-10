@@ -17,6 +17,7 @@ public sealed partial class MainWindow
     private JsonObject preferences = new();
     private TextBlock? memory, goroutines, inbound, outbound, uploadTotal, downloadTotal;
     private ComboBox? profilePicker;
+    private Button? closeAllButton;
     private bool pickingProfile, logsPaused;
     private string connectionSearch = "", logSearch = "", logCursor = "", visibleLogText = "";
     private int connectionFilter = 1, connectionSort;
@@ -146,7 +147,9 @@ public sealed partial class MainWindow
         search.TextChanged += (_, _) => { connectionSearch = search.Text; ShowConnections(); };
         var filter = Choices("State", ["All", "Active", "Closed"], connectionFilter, i => { connectionFilter = i; preferences["connection_filter"] = i; _ = Run(SavePreferences); ShowConnections(); });
         var sort = Choices("Sort By", ["Date", "Traffic", "Traffic Total"], connectionSort, i => { connectionSort = i; preferences["connection_sort"] = i; _ = Run(SavePreferences); ShowConnections(); });
-        body.Children.Add(Row(filter, sort, Button(T("Close All Connections"), async () => { await api.Call("connections", HttpMethod.Delete); })));
+        var closeAll = Button(T("Close All Connections"), async () => { await api.Call("connections", HttpMethod.Delete); });
+        closeAllButton = closeAll;
+        body.Children.Add(Row(filter, sort, closeAll));
         body.Children.Add(search); body.Children.Add(ConnectionRow([T("Chain") + "/" + T("Outbound"), T("Network"), T("Source") + " → " + T("Destination"), T("Rule"), T("Upload") + "/" + T("Download"), T("Duration")]));
         list = new ListView { SelectionMode = ListViewSelectionMode.None, HorizontalContentAlignment = HorizontalAlignment.Stretch }; body.Children.Add(list);
     }
@@ -199,7 +202,14 @@ public sealed partial class MainWindow
             double duration = DateTimeOffset.TryParse(S(c, "start"), out var since) ? Math.Max(0, (end - since).TotalSeconds) : 0;
             list.Items.Add(ConnectionRow([chain, S(m, "network"), $"{S(m, "sourceIP")}:{S(m, "sourcePort")} → {destination}:{S(m, "destinationPort")}", S(c, "rule") + " " + S(c, "rulePayload"), $"↑{Bytes(N(c, "upload"))} ↓{Bytes(N(c, "download"))}\n{Bytes(N(c, "speed"))}/s", $"{duration:0}s\n{T(B(c, "closed") ? "Closed" : "Active")}"]));
         }
-        if (list.Items.Count == 0) list.Items.Add(Text(T(connectionSearch != "" ? "No matching connections" : connectionFilter == 1 ? "No active connections" : connectionFilter == 2 ? "No closed connections" : "No connections")));
+        if (closeAllButton is not null) closeAllButton.IsEnabled = connectionHistory.Values.Any(c => !B(c, "closed"));
+        if (list.Items.Count == 0) {
+            var empty = Text(T(connectionSearch != "" ? "No matching connections" : connectionFilter == 1 ? "No active connections" : connectionFilter == 2 ? "No closed connections" : "No connections"), 13, "#8E8E93");
+            empty.HorizontalAlignment = HorizontalAlignment.Center;
+            empty.TextAlignment = TextAlignment.Center;
+            empty.Margin = new Thickness(0, 28, 0, 0);
+            list.Items.Add(empty);
+        }
     }
     private void RenderLogs(StackPanel body)
     {
@@ -276,7 +286,12 @@ public sealed partial class MainWindow
         lang.SelectionChanged += async (_, _) => await Run(async () => { await SaveApp(); LoadLanguage(lang.SelectedIndex == 1 ? "en-US" : "zh-CN"); });
         theme.SelectionChanged += async (_, _) => await Run(async () => { await SaveApp(); Root.RequestedTheme = theme.SelectedIndex switch { 1 => ElementTheme.Light, 2 => ElementTheme.Default, _ => ElementTheme.Dark }; Render(); });
         app.Children.Add(lang); app.Children.Add(theme); app.Children.Add(autoStart); body.Children.Add(Card(app));
-        var corePanel = new StackPanel { Spacing = 12 }; corePanel.Children.Add(Text(T("Core"), 18)); corePanel.Children.Add(new TextBox { Header = T("Core Path"), Text = S(metrics, "core_path"), IsReadOnly = true });
+        var corePanel = new StackPanel { Spacing = 12 }; corePanel.Children.Add(Text(T("Core"), 18));
+        string corePath = S(metrics, "core_path");
+        string shown = string.IsNullOrWhiteSpace(corePath) ? T("Bundled core") : System.IO.Path.GetFileName(corePath);
+        var coreBox = new TextBox { Header = T("Core Path"), Text = shown, IsReadOnly = true };
+        ToolTipService.SetToolTip(coreBox, corePath);
+        corePanel.Children.Add(coreBox);
         var logLevel = Choices("Log Level", ["error", "warn", "info", "debug", "trace"], Array.IndexOf(new[] { "error", "warn", "info", "debug", "trace" }, coreLogLevel), _ => { });
         logLevel.SelectionChanged += async (_, _) => await Run(async () => { await api.Call("native/core", HttpMethod.Put, new { log_level = logLevel.SelectedItem?.ToString() }); coreLogLevel = logLevel.SelectedItem?.ToString() ?? "info"; }); corePanel.Children.Add(logLevel); body.Children.Add(Card(corePanel));
         var overrides = new StackPanel { Spacing = 12 }; overrides.Children.Add(Text(T("Profile Override"), 18));

@@ -75,9 +75,10 @@
  <x:String x:Key="App">App</x:String>
  <x:String x:Key="Start At Login">Start At Login</x:String>
  <x:String x:Key="Core Path">Core Path</x:String>
+ <x:String x:Key="Bundled core">Bundled core</x:String>
  <x:String x:Key="No data">No data</x:String>
  <x:String x:Key="Real-time Speed">Real-time Speed</x:String>
- <x:String x:Key="TUN is unavailable">Unavailable</x:String>
+ <x:String x:Key="TUN is unavailable">TUN mode is not supported in this build</x:String>
  <x:String x:Key="All">All</x:String>
  <x:String x:Key="No Default Route">No Default Route</x:String>
  <x:String x:Key="Chain">Chain</x:String>
@@ -107,12 +108,12 @@
  <x:String x:Key="Sort By">Sort By</x:String>
  <x:String x:Key="Network">Network</x:String>
  <x:String x:Key="Inbound">Inbound</x:String>
- <x:String x:Key="Profile Override">Profile Override</x:String>
+ <x:String x:Key="Profile Override">Route Overrides</x:String>
  <x:String x:Key="Traffic Total">Traffic Total</x:String>
  <x:String x:Key="Select Profile">Select Profile</x:String>
  <x:String x:Key="Source">Source</x:String>
  <x:String x:Key="Duration">Duration</x:String>
- <x:String x:Key="Strict Route">strict_route</x:String>
+ <x:String x:Key="Strict Route">Strict Route</x:String>
  <x:String x:Key="Log Level">Log Level</x:String>
  <x:String x:Key="Core">Core</x:String>
  <x:String x:Key="About">About</x:String>

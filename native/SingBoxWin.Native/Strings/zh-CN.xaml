@@ -75,9 +75,10 @@
  <x:String x:Key="App">应用</x:String>
  <x:String x:Key="Start At Login">开机启动</x:String>
  <x:String x:Key="Core Path">核心路径</x:String>
+ <x:String x:Key="Bundled core">内置核心</x:String>
  <x:String x:Key="No data">无数据</x:String>
  <x:String x:Key="Real-time Speed">实时速率</x:String>
- <x:String x:Key="TUN is unavailable">不可用</x:String>
+ <x:String x:Key="TUN is unavailable">TUN 模式当前版本不支持</x:String>
  <x:String x:Key="All">所有</x:String>
  <x:String x:Key="No Default Route">不使用默认路由</x:String>
  <x:String x:Key="Chain">链</x:String>
@@ -107,12 +108,12 @@
  <x:String x:Key="Sort By">排序</x:String>
  <x:String x:Key="Network">网络</x:String>
  <x:String x:Key="Inbound">入站</x:String>
- <x:String x:Key="Profile Override">配置重载</x:String>
+ <x:String x:Key="Profile Override">路由选项</x:String>
  <x:String x:Key="Traffic Total">流量</x:String>
  <x:String x:Key="Select Profile">选择配置</x:String>
  <x:String x:Key="Source">源</x:String>
  <x:String x:Key="Duration">时长</x:String>
- <x:String x:Key="Strict Route">strict_route</x:String>
+ <x:String x:Key="Strict Route">严格路由</x:String>
  <x:String x:Key="Log Level">日志级别</x:String>
  <x:String x:Key="Core">核心</x:String>
  <x:String x:Key="About">关于</x:String>

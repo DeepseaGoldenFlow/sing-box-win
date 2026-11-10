@@ -49,7 +49,7 @@ Windows 使用当前用户命名互斥实现单实例；二次启动会通过 `r
 
 节点卡片列出当前配置的 selector/urltest 分组、成员、当前选择和延迟；运行时使用 Clash API 切换 selector 及测速，停止时仍能读取配置分组。urltest 的选择由内核自动管理，手动切换被内核拒绝时显示原文错误。
 
-界面按 SFM 的侧栏与卡片层级整理：16px 线性图标导航、浅蓝选中态、28px 内容边距、16px 卡片间隔、18px 卡片内距、单一主操作、上下行双曲线、中英及深浅色切换。截图取自 Windows 交互会话里真实运行的原生客户端（`build/native/SingBoxWin.Native.exe`）：[仪表](docs/screenshots/native-01-overview.png)、[组](docs/screenshots/native-02-groups.png)、[连接](docs/screenshots/native-03-connections.png)、[日志](docs/screenshots/native-04-logs.png)、[工具](docs/screenshots/native-05-tools.png)、[设置](docs/screenshots/native-06-settings.png)；另有[英文仪表页](docs/screenshots/native-08-dashboard-en.png)、[任务栏图标](docs/screenshots/native-07-taskbar-icon.png) 与[程序图标](docs/screenshots/native-09-exe-icon.png)。
+界面按 SFM 的侧栏与卡片层级整理：16px 线性图标导航、浅蓝选中态、28px 内容边距、16px 卡片间隔、18px 卡片内距、单一主操作、上下行双曲线、中英及深浅色切换。截图取自 Windows 交互会话里真实运行的原生客户端（`build/native/SingBoxWin.Native.exe`）：[仪表](docs/screenshots/native-01-overview.png)、[组](docs/screenshots/native-02-groups.png)、[连接](docs/screenshots/native-03-connections.png)、[日志](docs/screenshots/native-04-logs.png)、[工具](docs/screenshots/native-05-tools.png)、[设置](docs/screenshots/native-06-settings.png)；另有[任务栏图标](docs/screenshots/native-07-taskbar-icon.png)、[程序图标](docs/screenshots/native-09-exe-icon.png) 与[图标各尺寸阶梯](docs/screenshots/native-10-icon-sizes.png)（16→256，浅色与深色任务栏各一行）。
 
 本版采用纯 Go 后台常驻引擎 + 原生 WinUI 3 界面方案，不提供托盘图标/右键菜单。关闭或最小化窗口后内核继续运行，重新双击 exe 可唤回界面；在 Settings 或侧栏点击退出以停止程序。不增加 cgo、npm 依赖。
 
