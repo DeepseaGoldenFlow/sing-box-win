@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -16,7 +15,6 @@ import (
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json/badoption"
 	"io"
-	"io/fs"
 	"math"
 	"net"
 	"net/http"
@@ -32,10 +30,7 @@ import (
 	"time"
 )
 
-//go:embed web
-var web embed.FS
-
-const version = "0.3.0"
+const version = "0.4.0"
 
 type Profile struct {
 	ID      string    `json:"id"`
@@ -64,7 +59,6 @@ type Log struct {
 type App struct {
 	logStreamCancel context.CancelFunc
 	nativeLogs      []Log
-	headless        bool
 	mu              sync.Mutex
 	logMu           sync.Mutex
 	dir             string
@@ -318,16 +312,10 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch {
 	case r.URL.Path == "/api/activate" && r.Method == "POST":
-		var b struct {
-			Link     string
-			Headless bool
-		}
+		var b struct{ Link string }
 		err = decode(r, &b)
 		if err == nil && b.Link != "" {
 			err = a.importLink(b.Link)
-		}
-		if err == nil && !a.headless && !b.Headless && os.Getenv("SINGBOX_NO_BROWSER") == "" {
-			err = platform.OpenUI(a.runtimeURL() + "/#Profiles")
 		}
 	case r.URL.Path == "/api/protocol" && r.Method == "POST":
 		var b struct{ Enabled bool }
@@ -562,15 +550,13 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	reply(w, result)
 }
 func main() {
-	var headless, showUI bool
 	var port int
-	flag.BoolVar(&headless, "headless", false, "Run without opening a browser or window")
-	flag.BoolVar(&headless, "no-ui", false, "Alias for --headless")
-	flag.BoolVar(&showUI, "ui", false, "Open the embedded Web UI (default)")
-	flag.IntVar(&port, "port", 0, "UI/API port (0 selects a random port)")
+	flag.Bool("headless", false, "Accepted for compatibility; the engine always runs headless")
+	flag.Bool("no-ui", false, "Alias for --headless (accepted for compatibility)")
+	flag.IntVar(&port, "port", 0, "API port (0 selects a random port)")
 	flag.Parse()
-	if port < 0 || port > 65535 || (headless && showUI) {
-		fmt.Fprintln(os.Stderr, "invalid port or conflicting --ui and --headless")
+	if port < 0 || port > 65535 {
+		fmt.Fprintln(os.Stderr, "invalid port")
 		os.Exit(2)
 	}
 
@@ -596,7 +582,7 @@ func main() {
 		return
 	}
 	defer release()
-	a := &App{headless: headless, dir: dir, settings: Settings{Port: 2085, Theme: "dark", Language: "zh-CN", Profiles: []Profile{}}, quit: make(chan struct{})}
+	a := &App{dir: dir, settings: Settings{Port: 2085, Theme: "dark", Language: "zh-CN", Profiles: []Profile{}}, quit: make(chan struct{})}
 	if b, e := os.ReadFile(filepath.Join(dir, "settings.json")); e == nil {
 		if e = json.Unmarshal(b, &a.settings); e != nil {
 			panic(e)
@@ -647,11 +633,9 @@ func main() {
 	defer os.Remove(filepath.Join(dir, "runtime.json"))
 	fmt.Println(base)
 	a.WriteMessage(blog.LevelInfo, "HTTP API listening at "+base)
-	root, _ := fs.Sub(web, "web")
-	ui := http.FileServer(http.FS(root))
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/", a.api)
-	mux.Handle("/", ui)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { http.Error(w, "not found", 404) })
 	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Host != l.Addr().String() {
 			http.Error(w, "invalid host", 403)
@@ -672,11 +656,6 @@ func main() {
 			a.lastError = e.Error()
 		}
 		a.mu.Unlock()
-	}
-	if !a.headless && os.Getenv("SINGBOX_NO_BROWSER") == "" {
-		if e := platform.OpenUI(base + map[bool]string{true: "/#Profiles", false: ""}[len(os.Args) > 1]); e != nil {
-			a.WriteMessage(blog.LevelWarn, "打开浏览器失败: "+e.Error())
-		}
 	}
 	go func() {
 		t := time.NewTicker(time.Hour)

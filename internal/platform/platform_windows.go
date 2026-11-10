@@ -5,8 +5,6 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 	"os"
-	"os/exec"
-	"path/filepath"
 )
 
 const internet = `Software\Microsoft\Windows\CurrentVersion\Internet Settings`
@@ -83,13 +81,4 @@ func AutoStart(on bool) error {
 		return e
 	}
 	return k.SetStringValue("sing-box-win", `"`+exe+`"`)
-}
-func OpenUI(url string) error {
-	for _, base := range []string{os.Getenv("ProgramFiles(x86)"), os.Getenv("ProgramFiles"), os.Getenv("LOCALAPPDATA")} {
-		p := filepath.Join(base, "Microsoft", "Edge", "Application", "msedge.exe")
-		if _, e := os.Stat(p); e == nil {
-			return exec.Command(p, "--app="+url, "--window-size=1000,700").Start()
-		}
-	}
-	return exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", url).Start()
 }

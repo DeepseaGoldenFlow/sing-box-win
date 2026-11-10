@@ -16,4 +16,3 @@ func ReadProxy() (ProxyBackup, error) {
 }
 func WriteProxy(ProxyBackup) error { return fmt.Errorf("system proxy requires Windows") }
 func AutoStart(bool) error         { return nil }
-func OpenUI(string) error          { return nil }

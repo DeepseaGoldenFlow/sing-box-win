@@ -29,10 +29,12 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Title = "sing-box · Windows";
+        Title = "sing-box for Windows";
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true; SetTitleBar(TitleBar);
         AppWindow.Resize(new SizeInt32(1040, 720));
+        var iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico");
+        if (System.IO.File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
         Root.ActualThemeChanged += (_, _) => ApplyTitleTheme();
         ApplyTitleTheme();
         AppWindow.Changed += (_, args) => {
@@ -143,7 +145,7 @@ public sealed partial class MainWindow : Window
         if (rendering) return;
         ContentFrame.Content = null; Heading.Text = T(page);
         Toolbar.Children.Clear();
-        if (page == "Dashboard") Toolbar.Children.Add(Button(T("Dashboard Items"), ManageCards));
+        if (page == "Dashboard") Toolbar.Children.Add(Button(T("Edit Dashboard"), ManageCards));
         toolbarStart = Button(T("Start"), () => Core(Session.IsConnected ? "stop" : "start"), true); Toolbar.Children.Add(toolbarStart); UpdateControls();
         status = profile = up = down = totals = tailStatus = host = ips = expiry = sync = testResult = tailHint = null;
         profileList = null; list = null; chart = null;

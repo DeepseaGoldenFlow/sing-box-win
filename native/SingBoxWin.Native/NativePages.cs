@@ -262,7 +262,10 @@ public sealed partial class MainWindow
     private async Task RenderSettings()
     {
         if (!connected) return;
-        var settings = await api.Call("settings"); var core = await api.Call("native/core"); var metrics = await api.Call("native/status"); if (page != "Settings") return;
+        var settings = await api.Call("settings"); var core = await api.Call("native/core"); var metrics = await api.Call("native/status");
+        string version = "", coreVersion = "";
+        try { var info = await api.Call("tools/info"); version = S(info, "version"); coreVersion = S(info, "core_version"); } catch { }
+        if (page != "Settings") return;
         coreLogLevel = S(core, "log_level"); var body = Body(); body.Children.Clear();
         var app = new StackPanel { Spacing = 12 }; app.Children.Add(Text(T("App"), 18));
         var lang = Choices("Language", ["简体中文", "English"], language == "en-US" ? 1 : 0, _ => { });
@@ -279,5 +282,9 @@ public sealed partial class MainWindow
         var overrides = new StackPanel { Spacing = 12 }; overrides.Children.Add(Text(T("Profile Override"), 18));
         foreach (string name in new[] { "No Default Route", "Exclude Local Networks", "Strict Route" }) overrides.Children.Add(new ToggleSwitch { Header = T(name), IsEnabled = false });
         overrides.Children.Add(Text(T("TUN is unavailable"), 12)); body.Children.Add(Card(overrides));
+        var about = new StackPanel { Spacing = 6 }; about.Children.Add(Text(T("About"), 18));
+        var product = Text("sing-box for Windows", 15); product.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold; about.Children.Add(product);
+        if (version != "" && coreVersion != "") about.Children.Add(Text($"v{version} · sing-box core {coreVersion}", 12, "#8E8E93"));
+        body.Children.Add(Card(about));
     }
 }

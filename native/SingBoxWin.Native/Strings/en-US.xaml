@@ -115,4 +115,6 @@
  <x:String x:Key="Strict Route">strict_route</x:String>
  <x:String x:Key="Log Level">Log Level</x:String>
  <x:String x:Key="Core">Core</x:String>
+ <x:String x:Key="About">About</x:String>
+ <x:String x:Key="Edit Dashboard">Customize</x:String>
 </ResourceDictionary>

@@ -115,4 +115,6 @@
  <x:String x:Key="Strict Route">strict_route</x:String>
  <x:String x:Key="Log Level">日志级别</x:String>
  <x:String x:Key="Core">核心</x:String>
+ <x:String x:Key="About">关于</x:String>
+ <x:String x:Key="Edit Dashboard">自定义</x:String>
 </ResourceDictionary>
