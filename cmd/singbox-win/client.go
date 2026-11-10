@@ -74,7 +74,7 @@ func activateExisting(dir string) error {
 					link = v
 				}
 			}
-			body, _ := json.Marshal(map[string]string{"link": link})
+			body, _ := json.Marshal(map[string]any{"link": link, "headless": headlessRequested()})
 			c := http.Client{Timeout: 60 * time.Second}
 			resp, err := c.Post(r.URL+"/api/activate", "application/json", bytes.NewReader(body))
 			if err == nil {

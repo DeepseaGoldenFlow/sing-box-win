@@ -54,3 +54,23 @@ Windows 使用当前用户命名互斥实现单实例；二次启动会通过 `r
 本版采用纯 Go 后台常驻 + Edge 应用窗口与任务栏按钮方案，不提供托盘图标/右键菜单。关闭或最小化窗口后内核继续运行，重新双击 exe 可唤回界面；在 Settings 或侧栏点击退出以停止程序。不增加 cgo、npm 依赖。
 
 系统代理原值另写 `%APPDATA%\sing-box-win\proxy-backup.json`（先持久化后设置代理）；启动、停止或退出时，仅在 `ProxyEnable=1` 且 `ProxyServer` 与备份记录的本程序写入值一致时恢复，避免覆盖其他软件后续设置。强杀后下次启动同样恢复。默认混合端口统一为 **2085**。
+
+### Engine mode (0.3.0)
+
+Run `sing-box-win.exe --headless` (alias `--no-ui`) for the HTTP API without
+opening a window. Default startup and explicit `--ui` retain the embedded Web UI.
+`--port 2086` fixes the API port; omit it for a random loopback port recorded in
+`runtime.json`. Proxy settings still use their own port (default 2085).
+
+- `GET /api/tools/info`: `version`, `core_version`, `mode`, `data_dir`, `log_path`.
+- `GET /api/tools/tailscale`: `enabled`, `registered`, `state_dir_exists`,
+  `hostname`, `ips` (without CIDR suffix), `key_expiry`, `last_sync` (RFC3339).
+  Missing or invalid cache returns HTTP 200 with `registered:false`.
+- `POST /api/tools/tailscale/test`: GET `http://100.68.38.67/` through the local
+  mixed proxy, with a six-second timeout. Returns `ok`, `status`, `ms`, `error`;
+  HTTP 200/301/302 succeeds. A stopped core returns `error:"core not running"`.
+
+Core auto-connect continues to follow settings. Logs are also appended to
+`engine.log` in the data directory. Windows builds must use
+`-ldflags '-H windowsgui -s -w'` to prevent a console window (included in `make build`).
+Checks require the build tags from the Makefile, including `with_gvisor`.

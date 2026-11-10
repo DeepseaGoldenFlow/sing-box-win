@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"github.com/JARVIS/sing-box-win/internal/config"
 	"github.com/JARVIS/sing-box-win/internal/platform"
@@ -32,7 +33,7 @@ import (
 //go:embed web
 var web embed.FS
 
-const version = "0.2.0"
+const version = "0.3.0"
 
 type Profile struct {
 	ID      string    `json:"id"`
@@ -59,6 +60,7 @@ type Log struct {
 	Message string `json:"message"`
 }
 type App struct {
+	headless      bool
 	mu            sync.Mutex
 	logMu         sync.Mutex
 	dir           string
@@ -78,7 +80,14 @@ type App struct {
 func (a *App) WriteMessage(level blog.Level, msg string) {
 	a.logMu.Lock()
 	defer a.logMu.Unlock()
-	a.logs = append(a.logs, Log{time.Now().Format(time.RFC3339), blog.FormatLevel(level), msg})
+	entry := Log{time.Now().Format(time.RFC3339), blog.FormatLevel(level), msg}
+	a.logs = append(a.logs, entry)
+	if a.dir != "" {
+		if f, err := os.OpenFile(filepath.Join(a.dir, "engine.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600); err == nil {
+			_ = json.NewEncoder(f).Encode(entry)
+			_ = f.Close()
+		}
+	}
 	if len(a.logs) > 5000 {
 		a.logs = append([]Log(nil), a.logs[len(a.logs)-5000:]...)
 	}
@@ -291,12 +300,15 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch {
 	case r.URL.Path == "/api/activate" && r.Method == "POST":
-		var b struct{ Link string }
+		var b struct {
+			Link     string
+			Headless bool
+		}
 		err = decode(r, &b)
 		if err == nil && b.Link != "" {
 			err = a.importLink(b.Link)
 		}
-		if err == nil && os.Getenv("SINGBOX_NO_BROWSER") == "" {
+		if err == nil && !a.headless && !b.Headless && os.Getenv("SINGBOX_NO_BROWSER") == "" {
 			err = platform.OpenUI(a.runtimeURL() + "/#Profiles")
 		}
 	case r.URL.Path == "/api/protocol" && r.Method == "POST":
@@ -315,6 +327,12 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		if err = decode(r, &b); err == nil {
 			err = a.selectNode(b.Group, b.Name)
 		}
+	case r.URL.Path == "/api/tools/tailscale" && r.Method == "GET":
+		result = a.tailscaleStatus()
+	case r.URL.Path == "/api/tools/tailscale/test" && r.Method == "POST":
+		result = a.testTailscale()
+	case r.URL.Path == "/api/tools/info" && r.Method == "GET":
+		result = a.toolsInfo()
 	case r.URL.Path == "/api/state" && r.Method == "GET":
 		name := ""
 		for _, p := range a.settings.Profiles {
@@ -523,6 +541,18 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	reply(w, result)
 }
 func main() {
+	var headless, showUI bool
+	var port int
+	flag.BoolVar(&headless, "headless", false, "Run without opening a browser or window")
+	flag.BoolVar(&headless, "no-ui", false, "Alias for --headless")
+	flag.BoolVar(&showUI, "ui", false, "Open the embedded Web UI (default)")
+	flag.IntVar(&port, "port", 0, "UI/API port (0 selects a random port)")
+	flag.Parse()
+	if port < 0 || port > 65535 || (headless && showUI) {
+		fmt.Fprintln(os.Stderr, "invalid port or conflicting --ui and --headless")
+		os.Exit(2)
+	}
+
 	dir := os.Getenv("APPDATA")
 	if dir == "" {
 		dir, _ = os.UserConfigDir()
@@ -545,7 +575,7 @@ func main() {
 		return
 	}
 	defer release()
-	a := &App{dir: dir, settings: Settings{Port: 2085, Theme: "dark", Language: "zh-CN", Profiles: []Profile{}}, quit: make(chan struct{})}
+	a := &App{headless: headless, dir: dir, settings: Settings{Port: 2085, Theme: "dark", Language: "zh-CN", Profiles: []Profile{}}, quit: make(chan struct{})}
 	if b, e := os.ReadFile(filepath.Join(dir, "settings.json")); e == nil {
 		if e = json.Unmarshal(b, &a.settings); e != nil {
 			panic(e)
@@ -587,7 +617,7 @@ func main() {
 		}
 	}
 	a.save()
-	l, e := net.Listen("tcp", "127.0.0.1:0")
+	l, e := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if e != nil {
 		panic(e)
 	}
@@ -595,6 +625,7 @@ func main() {
 	os.WriteFile(filepath.Join(dir, "runtime.json"), []byte(fmt.Sprintf(`{"url":%q,"pid":%d}`, base, os.Getpid())), 0600)
 	defer os.Remove(filepath.Join(dir, "runtime.json"))
 	fmt.Println(base)
+	a.WriteMessage(blog.LevelInfo, "HTTP API listening at "+base)
 	root, _ := fs.Sub(web, "web")
 	ui := http.FileServer(http.FS(root))
 	mux := http.NewServeMux()
@@ -621,7 +652,7 @@ func main() {
 		}
 		a.mu.Unlock()
 	}
-	if os.Getenv("SINGBOX_NO_BROWSER") == "" {
+	if !a.headless && os.Getenv("SINGBOX_NO_BROWSER") == "" {
 		if e := platform.OpenUI(base + map[bool]string{true: "/#Profiles", false: ""}[len(os.Args) > 1]); e != nil {
 			a.WriteMessage(blog.LevelWarn, "打开浏览器失败: "+e.Error())
 		}
