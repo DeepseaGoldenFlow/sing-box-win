@@ -95,6 +95,14 @@
  <x:String x:Key="Closed">Closed</x:String>
  <x:String x:Key="Destination">Destination</x:String>
  <x:String x:Key="Groups">Groups</x:String>
+ <x:String x:Key="TestLatency">Test latency</x:String>
+ <x:String x:Key="StrategySelector">Manual selection</x:String>
+ <x:String x:Key="StrategyURLTest">URLTest auto select (lowest latency)</x:String>
+ <x:String x:Key="StrategyFallback">Fallback auto failover (in order)</x:String>
+ <x:String x:Key="StrategyLoadBalance">LoadBalance (weighted)</x:String>
+ <x:String x:Key="StrategyRelay">Relay chain</x:String>
+ <x:String x:Key="StrategyOther">Automatic strategy</x:String>
+ <x:String x:Key="ReadOnlyGroup">Read-only</x:String>
  <x:String x:Key="Done">Done</x:String>
  <x:String x:Key="Reset">Reset</x:String>
  <x:String x:Key="Rule">Rule</x:String>

@@ -38,11 +38,12 @@ type GroupMember struct {
 	Delay float64 `json:"delay"`
 }
 type Group struct {
-	Tag      string        `json:"tag"`
-	Type     string        `json:"type"`
-	Selected string        `json:"selected"`
-	Delay    float64       `json:"delay"`
-	Members  []GroupMember `json:"members"`
+	Tag        string        `json:"tag"`
+	Type       string        `json:"type"`
+	Selected   string        `json:"selected"`
+	Selectable bool          `json:"selectable"`
+	Delay      float64       `json:"delay"`
+	Members    []GroupMember `json:"members"`
 }
 
 func (a *App) groups() ([]Group, error) {
@@ -75,12 +76,14 @@ func (a *App) groups() ([]Group, error) {
 			continue
 		}
 		typ, _ := p["type"].(string)
-		if !strings.EqualFold(typ, "Selector") && !strings.EqualFold(typ, "URLTest") {
+		// Clash only exposes groups with members through `all`: Selector, URLTest, Fallback,
+		// LoadBalance, Relay. Only Selector groups accept a manual pick, the rest are automatic.
+		all, _ := p["all"].([]any)
+		if len(all) == 0 {
 			continue
 		}
 		selected, _ := p["now"].(string)
-		g := Group{Tag: tag, Type: typ, Selected: selected, Members: []GroupMember{}}
-		all, _ := p["all"].([]any)
+		g := Group{Tag: tag, Type: typ, Selected: selected, Selectable: strings.EqualFold(typ, "Selector"), Members: []GroupMember{}}
 		for _, item := range all {
 			name, ok := item.(string)
 			if !ok {
@@ -195,14 +198,26 @@ func (a *App) pageAPI(w http.ResponseWriter, r *http.Request) bool {
 			a.unavailable(w, e)
 			break
 		}
+		var target *Group
+		for i := range groups {
+			if groups[i].Tag == tag {
+				target = &groups[i]
+				break
+			}
+		}
+		if target == nil {
+			http.Error(w, "group not found", 404)
+			break
+		}
+		if !target.Selectable {
+			http.Error(w, fmt.Sprintf("该组是自动策略组（%s），不支持手动选择节点；只有 Selector 组可以选。", target.Type), http.StatusConflict)
+			break
+		}
 		found := false
-		for _, g := range groups {
-			if g.Tag == tag {
-				for _, m := range g.Members {
-					if m.Tag == b.Outbound {
-						found = true
-					}
-				}
+		for _, m := range target.Members {
+			if m.Tag == b.Outbound {
+				found = true
+				break
 			}
 		}
 		if !found {

@@ -95,6 +95,14 @@
  <x:String x:Key="Closed">已关闭</x:String>
  <x:String x:Key="Destination">目标地址</x:String>
  <x:String x:Key="Groups">组</x:String>
+ <x:String x:Key="TestLatency">测速</x:String>
+ <x:String x:Key="StrategySelector">手动选择</x:String>
+ <x:String x:Key="StrategyURLTest">URLTest 自动选择（最低延迟）</x:String>
+ <x:String x:Key="StrategyFallback">Fallback 自动切换（按顺序故障转移）</x:String>
+ <x:String x:Key="StrategyLoadBalance">LoadBalance 负载均衡（按权重分流）</x:String>
+ <x:String x:Key="StrategyRelay">Relay 链式转发</x:String>
+ <x:String x:Key="StrategyOther">自动策略</x:String>
+ <x:String x:Key="ReadOnlyGroup">只读</x:String>
  <x:String x:Key="Done">完成</x:String>
  <x:String x:Key="Reset">重置</x:String>
  <x:String x:Key="Rule">规则</x:String>
