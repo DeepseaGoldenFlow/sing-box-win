@@ -31,7 +31,7 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250205002" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
   </ItemGroup>
-  <Target Name="FixOriginalFilename" AfterTargets="Build" Condition="'$(OS)' == 'Windows_NT' and Exists('$(TargetPath)')">
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\build\fix-original-filename.ps1&quot; -Path &quot;$(TargetPath)&quot;" />
+  <Target Name="FixOriginalFilename" AfterTargets="Build" Condition="'$(OS)' == 'Windows_NT' and Exists('$(TargetDir)$(AssemblyName).exe')">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\build\fix-original-filename.ps1&quot; -Path &quot;$(TargetDir)$(AssemblyName).exe&quot;" />
   </Target>
 </Project>
