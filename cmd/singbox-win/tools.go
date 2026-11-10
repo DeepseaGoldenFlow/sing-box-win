@@ -106,6 +106,9 @@ type connectivityResult struct {
 }
 
 func (a *App) testTailscale() connectivityResult {
+	return a.testConnectivity("http://100.68.38.67/")
+}
+func (a *App) testConnectivity(target string) connectivityResult {
 	result := connectivityResult{}
 	if a.core == nil {
 		result.Error = "core not running"
@@ -120,7 +123,7 @@ func (a *App) testTailscale() connectivityResult {
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, Timeout: 6 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	start := time.Now()
-	resp, err := client.Get("http://100.68.38.67/")
+	resp, err := client.Get(target)
 	result.MS = time.Since(start).Milliseconds()
 	if err != nil {
 		result.Error = err.Error()
@@ -128,7 +131,7 @@ func (a *App) testTailscale() connectivityResult {
 	}
 	defer resp.Body.Close()
 	result.Status = resp.StatusCode
-	result.OK = resp.StatusCode == 200 || resp.StatusCode == 301 || resp.StatusCode == 302
+	result.OK = resp.StatusCode == 200 || resp.StatusCode == 204 || resp.StatusCode == 301 || resp.StatusCode == 302
 	if !result.OK {
 		result.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
 	}

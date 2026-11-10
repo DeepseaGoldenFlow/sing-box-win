@@ -68,20 +68,55 @@ public sealed partial class MainWindow
         dashboardCards.Clear();
         status = Text(T("Stopped"), 24); profile = Text(T("NoProfile"));
         var box = new StackPanel { Spacing = 12 }; box.Children.Add(status);
+        var proxyPanel = new StackPanel { Spacing = 10 };
+        systemProxyToggle = new ToggleSwitch { Header = T("System Proxy") };
+        systemProxyToggle.Toggled += async (_, _) => {
+            if (updatingProxy) return;
+            await Run(async () => { await api.Call("proxy", HttpMethod.Post, new { enabled = systemProxyToggle.IsOn }); });
+            await Refresh();
+        };
+        proxyHint = Text("", 12, "#9A9AA0");
+        proxyPanel.Children.Add(systemProxyToggle); proxyPanel.Children.Add(proxyHint);
+        var networkResult = Text("", 12);
+        proxyPanel.Children.Add(Button(T("Check Internet"), async () => {
+            var result = await api.Call("tools/connectivity", HttpMethod.Post);
+            networkResult.Text = B(result, "ok") ? T("Internet OK") + $" · {N(result, "ms"):0} ms" : T("Internet Failed") + " · " + S(result, "error");
+            networkResult.Foreground = Brush(B(result, "ok") ? "#30D158" : "#FF453A");
+        }));
+        proxyPanel.Children.Add(networkResult);
         memory = Text("..."); goroutines = Text("..."); box.Children.Add(Row(Text(T("Memory")), memory, Text("Goroutines"), goroutines)); AddDashboardCard(body, "Status", box);
         inbound = Text("..."); outbound = Text("..."); AddDashboardCard(body, "Connections", Row(Text(T("Inbound")), inbound, Text(T("Outbound")), outbound));
+        AddDashboardCard(body, "System Proxy", proxyPanel);
         up = Text("...", 28); uploadTotal = Text("..."); var u = new StackPanel { Spacing = 8 }; u.Children.Add(up); u.Children.Add(uploadTotal); AddDashboardCard(body, "Upload", u);
         down = Text("...", 28); downloadTotal = Text("..."); var d = new StackPanel { Spacing = 8 }; d.Children.Add(down); d.Children.Add(downloadTotal); AddDashboardCard(body, "Download", d);
         chart = new Microsoft.UI.Xaml.Controls.Canvas { Height = 150, HorizontalAlignment = HorizontalAlignment.Stretch }; chart.SizeChanged += (_, _) => DrawChart(); AddDashboardCard(body, "Real-time Speed", chart);
         var profiles = new StackPanel { Spacing = 12 }; profilePicker = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, PlaceholderText = T("Select Profile") };
         profilePicker.SelectionChanged += async (_, _) => { if (pickingProfile || profilePicker.SelectedItem is not ComboBoxItem item) return; await Run(async () => { transition = Session.IsConnectedStrict ? ConnectionPhase.Reasserting : null; UpdateControls(); try { await api.Call("native/profile", HttpMethod.Put, new { id = (string)item.Tag }); } finally { transition = null; } }); await Refresh(); };
-        profiles.Children.Add(profilePicker); profiles.Children.Add(Button(T("Import Profile"), Import)); AddDashboardCard(body, "Profile", profiles);
+        profiles.Children.Add(profilePicker);
+        profiles.Children.Add(Row(Button(T("Import Profile"), Import), Button(T("Update Profile"), async () => {
+            if (profilePicker.SelectedItem is ComboBoxItem selected) {
+                await api.Call("profiles/" + (string)selected.Tag + "/update", HttpMethod.Post);
+            }
+        }))); AddDashboardCard(body, "Profile", profiles);
+        PairDashboardCards(body, "Status", "Connections");
+        PairDashboardCards(body, "Upload", "Download");
         UpdateControls();
+    }
+    private void PairDashboardCards(StackPanel body, string left, string right)
+    {
+        var a = dashboardCards[left]; var b = dashboardCards[right];
+        int index = body.Children.IndexOf(a);
+        body.Children.Remove(a); body.Children.Remove(b);
+        var grid = new Grid { ColumnSpacing = 16 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        Grid.SetColumn(b, 1); grid.Children.Add(a); grid.Children.Add(b);
+        body.Children.Insert(index, grid);
     }
     private async Task ManageCards()
     {
         var panel = new StackPanel { Spacing = 12 };
-        foreach (string key in new[] { "Status", "Connections", "Upload", "Download", "Real-time Speed", "Profile" }) {
+        foreach (string key in new[] { "Status", "Connections", "Upload", "Download", "Real-time Speed", "System Proxy", "Profile" }) {
             var toggle = new CheckBox { Content = T(key), IsChecked = CardEnabled(key), IsEnabled = key != "Profile" };
             toggle.Click += async (_, _) => { if (preferences["cards"] is not JsonObject) preferences["cards"] = new JsonObject(); preferences["cards"]![key] = toggle.IsChecked == true; await Run(SavePreferences); UpdateControls(); }; panel.Children.Add(toggle);
         }
@@ -95,6 +130,13 @@ public sealed partial class MainWindow
         var profiles = await api.Call("profiles") as JsonArray;
         if (page != "Dashboard" || status is null) return;
         status.Text = T(S(state, "error") != "" ? "Error" : Session.IsConnectedStrict ? "Running" : Session.IsConnected ? "Connecting..." : "Stopped");
+        if (systemProxyToggle is not null) {
+            updatingProxy = true;
+            systemProxyToggle.IsOn = B(state, "system_proxy");
+            systemProxyToggle.IsEnabled = Session.IsConnectedStrict;
+            updatingProxy = false;
+            proxyHint!.Text = T(!Session.IsConnectedStrict ? "Start to connect" : B(state, "system_proxy") ? "Browser proxy active" : "Proxy off hint");
+        }
         profile!.Text = S(state, "profile") == "" ? T("NoProfile") : S(state, "profile");
         memory!.Text = Bytes(N(metrics, "memory")); goroutines!.Text = S(metrics, "goroutines");
         inbound!.Text = S(metrics, "connections_in"); outbound!.Text = S(metrics, "connections_out");
@@ -301,7 +343,17 @@ public sealed partial class MainWindow
         autoStart.Toggled += async (_, _) => await Run(SaveApp);
         lang.SelectionChanged += async (_, _) => await Run(async () => { await SaveApp(); LoadLanguage(lang.SelectedIndex == 1 ? "en-US" : "zh-CN"); });
         theme.SelectionChanged += async (_, _) => await Run(async () => { await SaveApp(); Root.RequestedTheme = theme.SelectedIndex switch { 1 => ElementTheme.Light, 2 => ElementTheme.Default, _ => ElementTheme.Dark }; Render(); });
-        app.Children.Add(lang); app.Children.Add(theme); app.Children.Add(autoStart); body.Children.Add(Card(app));
+        app.Children.Add(lang); app.Children.Add(theme); app.Children.Add(autoStart);
+        var autoConnect = new ToggleSwitch { Header = T("Auto Connect"), IsOn = B(settings, "auto_connect") };
+        autoConnect.Toggled += async (_, _) => await Run(async () => { await api.Call("settings", HttpMethod.Post, new { auto_connect = autoConnect.IsOn }); });
+        var autoProxy = new ToggleSwitch { Header = T("Auto Proxy"), IsOn = settings?["auto_proxy"] is null || B(settings, "auto_proxy") };
+        autoProxy.Toggled += async (_, _) => await Run(async () => { await api.Call("settings", HttpMethod.Post, new { auto_proxy = autoProxy.IsOn }); });
+        var closeMode = new ToggleSwitch { Header = T("Close to Tray"), IsOn = !closeExits };
+        closeMode.Toggled += async (_, _) => await Run(async () => { closeExits = !closeMode.IsOn; preferences["close_exits"] = closeExits; await SavePreferences(); });
+        app.Children.Add(autoConnect); app.Children.Add(autoProxy); app.Children.Add(closeMode);
+        app.Children.Add(Text(T("Tray Hint"), 12, "#9A9AA0"));
+        app.Children.Add(Button(T("Quit Client"), Quit));
+        body.Children.Add(Card(app));
         var corePanel = new StackPanel { Spacing = 12 }; corePanel.Children.Add(Text(T("Core"), 18));
         string corePath = S(metrics, "core_path");
         string shown = string.IsNullOrWhiteSpace(corePath) ? T("Bundled core") : System.IO.Path.GetFileName(corePath);

@@ -126,4 +126,18 @@
  <x:String x:Key="Core">Core</x:String>
  <x:String x:Key="About">About</x:String>
  <x:String x:Key="Edit Dashboard">Customize</x:String>
+ <x:String x:Key="System Proxy">System proxy</x:String>
+ <x:String x:Key="Start to connect">Start the service to enable system proxy.</x:String>
+ <x:String x:Key="Browser proxy active">Browser traffic uses the local proxy. Other apps may need their own proxy settings.</x:String>
+ <x:String x:Key="Proxy off hint">Service is running, but system proxy is off. Browsers will not use it automatically.</x:String>
+ <x:String x:Key="Auto Connect">Start service when client opens</x:String>
+ <x:String x:Key="Auto Proxy">Enable system proxy when service starts</x:String>
+ <x:String x:Key="Close to Tray">Close window to notification area</x:String>
+ <x:String x:Key="Tray Hint">The icon may be in the hidden notification icons. Click to open; right-click to start, stop or quit. Hiding keeps the service running.</x:String>
+ <x:String x:Key="Quit Client">Quit client and stop service</x:String>
+ <x:String x:Key="Tray unavailable">Notification icon unavailable. Keeping the window open.</x:String>
+ <x:String x:Key="Update Profile">Update current profile</x:String>
+ <x:String x:Key="Check Internet">Check Google connectivity</x:String>
+ <x:String x:Key="Internet OK">Google is reachable through the local proxy</x:String>
+ <x:String x:Key="Internet Failed">Proxy connectivity check failed</x:String>
 </ResourceDictionary>

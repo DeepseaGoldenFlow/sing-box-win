@@ -126,4 +126,18 @@
  <x:String x:Key="Core">核心</x:String>
  <x:String x:Key="About">关于</x:String>
  <x:String x:Key="Edit Dashboard">自定义</x:String>
+ <x:String x:Key="System Proxy">系统代理</x:String>
+ <x:String x:Key="Start to connect">启动服务后可开启系统代理。</x:String>
+ <x:String x:Key="Browser proxy active">浏览器已通过本机代理连接；不支持系统代理的应用需单独配置。</x:String>
+ <x:String x:Key="Proxy off hint">服务已启动，但系统代理关闭，浏览器不会自动使用代理。</x:String>
+ <x:String x:Key="Auto Connect">打开客户端时自动启动服务</x:String>
+ <x:String x:Key="Auto Proxy">启动服务时自动开启系统代理</x:String>
+ <x:String x:Key="Close to Tray">点击关闭按钮时隐藏到托盘</x:String>
+ <x:String x:Key="Tray Hint">托盘可能收在右下角的“显示隐藏图标”中。单击打开界面，右键可启停服务或退出；隐藏窗口后服务继续运行。</x:String>
+ <x:String x:Key="Quit Client">退出客户端并停止服务</x:String>
+ <x:String x:Key="Tray unavailable">托盘图标不可用，窗口保持打开以避免无法找回。</x:String>
+ <x:String x:Key="Update Profile">更新当前配置</x:String>
+ <x:String x:Key="Check Internet">检查 Google 连通性</x:String>
+ <x:String x:Key="Internet OK">Google 可通过本地代理访问</x:String>
+ <x:String x:Key="Internet Failed">代理连通性检查失败</x:String>
 </ResourceDictionary>

@@ -14,6 +14,10 @@ namespace SingBoxWin.Native;
 public sealed partial class MainWindow : Window
 {
     private readonly EngineClient api = new();
+    private TrayIcon? tray;
+    private ToggleSwitch? systemProxyToggle;
+    private TextBlock? proxyHint;
+    private bool updatingProxy;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly Queue<(double up, double down)> samples = new();
     private ResourceDictionary strings = new();
@@ -52,11 +56,18 @@ public sealed partial class MainWindow : Window
             }
             else
             {
-                AppWindow.Hide();
+                if (tray?.Available == true) AppWindow.Hide();
+                else { Notice.Message = T("Tray unavailable"); Notice.IsOpen = true; }
             }
         };
         try { closeExits = JsonNode.Parse(System.IO.File.ReadAllText(prefsPath))?["close_exits"]?.GetValue<bool>() ?? false; } catch { }
         LoadPreferences();
+        try {
+            tray = new TrayIcon(WinRT.Interop.WindowNative.GetWindowHandle(this), iconPath, ShowWindow,
+                () => _ = TrayAction(() => Core(B(state, "running") ? "stop" : "start")),
+                () => _ = TrayAction(async () => { await api.Call("proxy", HttpMethod.Post, new { enabled = !B(state, "system_proxy") }); }),
+                () => _ = TrayAction(Quit));
+        } catch (Exception ex) { Notice.Message = ex.Message; Notice.IsOpen = true; }
         LoadLanguage("zh-CN");
         Nav.SelectionChanged += (_, _) => { if (!rendering && Nav.SelectedItem is NavigationViewItem item) { page = (string)item.Tag; Render(); _ = Refresh(); } };
         timer.Tick += async (_, _) => await Refresh();
@@ -71,6 +82,7 @@ public sealed partial class MainWindow : Window
             LoadLanguage(S(settings, "language").StartsWith("en") ? "en-US" : "zh-CN");
             Root.RequestedTheme = S(settings, "theme") switch { "light" => ElementTheme.Light, "system" => ElementTheme.Default, _ => ElementTheme.Dark };
             Render(); timer.Start(); await Refresh();
+            if (Environment.GetCommandLineArgs().Contains("--background") && tray?.Available == true) AppWindow.Hide();
         });
         if (!connected) { var retry = Button(T("Retry"), async () => { await api.ConnectAsync(); connected = true; Render(); timer.Start(); await Refresh(); }); Body().Children.Add(retry); }
     }
@@ -117,7 +129,7 @@ public sealed partial class MainWindow : Window
         button.Opacity = enabled ? 1 : .4;
     }
     private StackPanel Row(params UIElement[] elements) { var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 }; foreach (var element in elements) row.Children.Add(element); return row; }
-    private Border Card(UIElement child) { var c = new Border { Child = child, Padding = new Thickness(20), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1) }; var resources = (ResourceDictionary)Application.Current.Resources.ThemeDictionaries[Root.RequestedTheme == ElementTheme.Light ? "Light" : "Dark"]; c.Background = (Microsoft.UI.Xaml.Media.Brush)resources["CardBrush"]; c.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)resources["EdgeBrush"]; return c; }
+    private Border Card(UIElement child) { var c = new Border { Child = child, Padding = new Thickness(20), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1) }; var resources = (ResourceDictionary)Application.Current.Resources.ThemeDictionaries[Root.ActualTheme == ElementTheme.Light ? "Light" : "Dark"]; c.Background = (Microsoft.UI.Xaml.Media.Brush)resources["CardBrush"]; c.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)resources["EdgeBrush"]; return c; }
     private Button Button(string title, Func<Task> action, bool primary = false)
     {
         var button = new Button { Content = title };
@@ -187,7 +199,20 @@ public sealed partial class MainWindow : Window
         testResult.Text = $"HTTP {N(result, "status"):0} · {N(result, "ms"):0} ms" + (B(result, "ok") ? "" : " · " + S(result, "error"));
         testResult.Foreground = Brush(B(result, "ok") ? "#30D158" : "#FF453A");
     }
-    private async Task Quit() { if (connected) await api.Call("quit", HttpMethod.Post); exiting = true; Application.Current.Exit(); }
+    private void ShowWindow() {
+        AppWindow.Show();
+        if (AppWindow.Presenter is OverlappedPresenter presenter) presenter.Restore();
+        Activate(); TrayIcon.SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+    }
+    private async Task TrayAction(Func<Task> action) {
+        if (acting) return;
+        acting = true; await Run(action); acting = false; await Refresh();
+        if (Notice.IsOpen) ShowWindow();
+    }
+    private async Task Quit() {
+        if (connected) await api.Call("quit", HttpMethod.Post);
+        exiting = true; timer.Stop(); tray?.Dispose(); Application.Current.Exit();
+    }
     private async Task Refresh()
     {
         if (!connected || refreshing || acting) return;
@@ -196,6 +221,7 @@ public sealed partial class MainWindow : Window
         try {
             state = await api.Call("state");
             UpdateControls();
+            tray?.Update(B(state, "running"), B(state, "system_proxy"), language == "en-US");
             if (page != requestedPage) return;
             switch (requestedPage) {
                 case "Dashboard": await RefreshDashboard(); break;

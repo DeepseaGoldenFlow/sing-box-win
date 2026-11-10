@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -30,7 +31,7 @@ import (
 	"time"
 )
 
-const version = "0.4.2"
+const version = "0.5.0"
 
 type Profile struct {
 	ID      string    `json:"id"`
@@ -42,6 +43,7 @@ type Profile struct {
 }
 type Settings struct {
 	AutoStart   bool                  `json:"auto_start"`
+	AutoProxy   *bool                 `json:"auto_proxy"`
 	AutoConnect bool                  `json:"auto_connect"`
 	UpdateHours int                   `json:"update_hours"`
 	Port        int                   `json:"port"`
@@ -197,6 +199,14 @@ func (a *App) start() error {
 	a.startLogStream()
 	a.trafficTime = time.Time{}
 	a.lastError = ""
+	// Missing preference on existing installs defaults to browser-ready starts.
+	if runtime.GOOS == "windows" && (a.settings.AutoProxy == nil || *a.settings.AutoProxy) {
+		if err := a.setProxy(true); err != nil {
+			_ = a.stop()
+			a.lastError = "System proxy: " + err.Error()
+			return errors.New(a.lastError)
+		}
+	}
 	return nil
 }
 func (a *App) setProxy(on bool) error {
@@ -337,6 +347,8 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		result = a.tailscaleStatus()
 	case r.URL.Path == "/api/tools/tailscale/test" && r.Method == "POST":
 		result = a.testTailscale()
+	case r.URL.Path == "/api/tools/connectivity" && r.Method == "POST":
+		result = a.testConnectivity("https://www.google.com/generate_204")
 	case r.URL.Path == "/api/tools/info" && r.Method == "GET":
 		result = a.toolsInfo()
 	case r.URL.Path == "/api/state" && r.Method == "GET":

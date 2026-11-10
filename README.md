@@ -40,7 +40,7 @@ Clash 控制器另开随机 loopback 端口并配置每次启动随机密钥。U
 
 - P0：配置导入/增删改/启用、内核启动停止重启、原文错误、系统代理恢复、日志筛选/搜索/自动滚动、五页深色 UI、持久化。
 - P1：每秒流量曲线/累计/连接数，连接单条及全部关闭，节点/分组及当前选中显示、单条/全部测速，订阅手动及自动更新，开机自启，剪贴板导入。
-- P1.5：深链注册与导入、节点选择、单实例激活、双语与主题；托盘采用下述后台常驻替代方案。
+- P1.5：深链注册与导入、节点选择、单实例激活、双语与主题；原生托盘与后台常驻已在 v0.5.0 补齐。
 - TODO P2：TUN/管理员权限/wintun.dll、规则编辑、内核更新检查。
 
 本项目对接真实远程配置，内核启动及节点可用性仍依赖网络、订阅内容与 Tailscale 认证状态。不要把配置中的认证信息提交到 Git。
@@ -53,7 +53,7 @@ Windows 使用当前用户命名互斥实现单实例；二次启动会通过 `r
 
 界面按 SFM 的侧栏与卡片层级整理：16px 线性图标导航、浅蓝选中态、28px 内容边距、16px 卡片间隔、18px 卡片内距、单一主操作、上下行双曲线、中英及深浅色切换。截图取自 Windows 交互会话里真实运行的原生客户端（`build/native/SingBoxWin.Native.exe`）：[仪表](docs/screenshots/native-01-overview.png)、[组](docs/screenshots/native-02-groups.png)、[组（自动策略组只读）](docs/screenshots/native-02b-groups-urltest.png)、[连接](docs/screenshots/native-03-connections.png)、[日志](docs/screenshots/native-04-logs.png)、[工具](docs/screenshots/native-05-tools.png)、[设置](docs/screenshots/native-06-settings.png)；另有[任务栏图标](docs/screenshots/native-07-taskbar-icon.png)、[程序图标](docs/screenshots/native-09-exe-icon.png) 与[图标各尺寸阶梯](docs/screenshots/native-10-icon-sizes.png)（16→256，浅色与深色任务栏各一行）。
 
-本版采用纯 Go 后台常驻引擎 + 原生 WinUI 3 界面方案，不提供托盘图标/右键菜单。关闭或最小化窗口后内核继续运行，重新双击 exe 可唤回界面；在 Settings 或侧栏点击退出以停止程序。不增加 cgo、npm 依赖。
+本版采用纯 Go 后台常驻引擎 + 原生 WinUI 3 界面。v0.5.0 提供 Windows 原生托盘：点击打开窗口，右键可启停服务、切换系统代理和正常退出。默认点击关闭按钮隐藏到托盘，服务继续运行；设置中可改为关闭即退出。托盘不可用时保留窗口，避免无法找回。图标可能位于 Windows 隐藏图标区域。不增加 cgo、npm 依赖。
 
 系统代理原值另写 `%APPDATA%\sing-box-win\proxy-backup.json`（先持久化后设置代理）；启动、停止或退出时，仅在 `ProxyEnable=1` 且 `ProxyServer` 与备份记录的本程序写入值一致时恢复，避免覆盖其他软件后续设置。强杀后下次启动同样恢复。默认混合端口统一为 **2085**。
 
@@ -77,3 +77,11 @@ Core auto-connect continues to follow settings. Logs are also appended to
 `engine.log` in the data directory. Windows builds must use
 `-ldflags '-H windowsgui -s -w'` to prevent a console window (included in `make build`).
 Checks require the build tags from the Makefile, including `with_gvisor`.
+
+### v0.5.0 Windows 日常使用补齐
+
+- 启动服务默认同时开启当前用户系统代理，停止/退出恢复原值。设置中的「启动服务时自动开启系统代理」可关闭此默认行为；不等于 TUN。
+- 仪表增加系统代理状态和开关、Google 代理连通性检查；状态/连接、上传/下载以双列卡片展示。
+- 应用设置增加自动连接、关闭到托盘、正常退出入口；登录自启启动原生客户端并隐藏到托盘。
+- 配置卡片新增更新当前配置。更新保存后若需立即应用新规则，可停止再启动服务。
+- 验证记录和与本机 SFM 对照结果：[v0.5.0 验证](docs/v050-validation.md)。
