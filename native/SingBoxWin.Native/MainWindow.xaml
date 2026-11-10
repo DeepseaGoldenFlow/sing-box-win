@@ -2,7 +2,7 @@
  <Grid x:Name="Root" Background="{ThemeResource ShellBrush}" RequestedTheme="Dark">
   <Grid.RowDefinitions><RowDefinition Height="44"/><RowDefinition Height="*"/></Grid.RowDefinitions>
   <Grid x:Name="TitleBar" Margin="20,0,150,0"><TextBlock Text="sing-box" FontWeight="SemiBold" VerticalAlignment="Center" FontSize="13"/></Grid>
-  <NavigationView x:Name="Nav" Grid.Row="1" PaneDisplayMode="Left" IsSettingsVisible="False" IsBackButtonVisible="Collapsed" IsPaneToggleButtonVisible="False" OpenPaneLength="196" AlwaysShowHeader="False" FontFamily="Segoe UI Variable Text, Microsoft YaHei UI">
+  <NavigationView x:Name="Nav" Grid.Row="1" PaneDisplayMode="Left" IsSettingsVisible="False" IsBackButtonVisible="Collapsed" IsPaneToggleButtonVisible="False" OpenPaneLength="150" IsPaneOpen="True" CompactModeThresholdWidth="0" ExpandedModeThresholdWidth="0" AlwaysShowHeader="False" FontFamily="Segoe UI Variable Text, Microsoft YaHei UI">
    <NavigationView.Resources>
     <ResourceDictionary>
      <ResourceDictionary.ThemeDictionaries>
@@ -26,9 +26,9 @@
      <Thickness x:Key="NavigationViewItemButtonMargin">4</Thickness>
     </ResourceDictionary>
    </NavigationView.Resources>
-   <Grid Padding="28,20,28,28"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+   <Grid MinWidth="650" Padding="20,16,20,20"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
     <InfoBar x:Name="Notice" IsOpen="False" Severity="Error" IsClosable="True" Margin="0,0,0,16"/>
-    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" Margin="0,0,0,20"><TextBlock x:Name="Heading" FontSize="26" FontWeight="SemiBold"/><ProgressRing x:Name="Busy" Width="24" Height="24" IsActive="False"/></StackPanel>
+    <Grid Grid.Row="1" Margin="0,0,0,20"><StackPanel Orientation="Horizontal" Spacing="12"><TextBlock x:Name="Heading" FontSize="26" FontWeight="SemiBold"/><ProgressRing x:Name="Busy" Width="24" Height="24" IsActive="False"/></StackPanel><StackPanel x:Name="Toolbar" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right"/></Grid>
     <Frame x:Name="ContentFrame" Grid.Row="2"/>
    </Grid>
   </NavigationView>

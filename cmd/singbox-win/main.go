@@ -17,6 +17,7 @@ import (
 	"github.com/sagernet/sing/common/json/badoption"
 	"io"
 	"io/fs"
+	"math"
 	"net"
 	"net/http"
 	"net/netip"
@@ -24,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -60,21 +62,23 @@ type Log struct {
 	Message string `json:"message"`
 }
 type App struct {
-	headless      bool
-	mu            sync.Mutex
-	logMu         sync.Mutex
-	dir           string
-	settings      Settings
-	core          *box.Box
-	logs          []Log
-	lastError     string
-	clash         string
-	secret        string
-	proxy         bool
-	quit          chan struct{}
-	trafficTime   time.Time
-	uploadTotal   float64
-	downloadTotal float64
+	logStreamCancel context.CancelFunc
+	nativeLogs      []Log
+	headless        bool
+	mu              sync.Mutex
+	logMu           sync.Mutex
+	dir             string
+	settings        Settings
+	core            *box.Box
+	logs            []Log
+	lastError       string
+	clash           string
+	secret          string
+	proxy           bool
+	quit            chan struct{}
+	trafficTime     time.Time
+	uploadTotal     float64
+	downloadTotal   float64
 }
 
 func (a *App) WriteMessage(level blog.Level, msg string) {
@@ -107,6 +111,10 @@ func (a *App) save() error {
 func (a *App) profilePath(id string) string { return filepath.Join(a.dir, "profiles", id+".json") }
 func id() string                            { var b [16]byte; _, _ = rand.Read(b[:]); return hex.EncodeToString(b[:]) }
 func (a *App) stop() error {
+	if a.logStreamCancel != nil {
+		a.logStreamCancel()
+		a.logStreamCancel = nil
+	}
 	if a.proxy || a.settings.ProxyBackup != nil {
 		if e := a.setProxy(false); e != nil {
 			return e
@@ -176,7 +184,13 @@ func (a *App) start() error {
 		opt.Experimental = &option.ExperimentalOptions{}
 	}
 	opt.Experimental.ClashAPI = &option.ClashAPIOptions{ExternalController: strings.TrimPrefix(a.clash, "http://"), Secret: a.secret}
-	opt.Log = &option.LogOptions{Level: "info", Timestamp: true, DisableColor: true}
+	native := a.nativeOptions()
+	if native.MemoryLimitMB > 0 {
+		debug.SetMemoryLimit(native.MemoryLimitMB * 1024 * 1024)
+	} else {
+		debug.SetMemoryLimit(math.MaxInt64)
+	}
+	opt.Log = &option.LogOptions{Level: native.LogLevel, Timestamp: true, DisableColor: false}
 	instance, e := box.New(box.Options{Options: opt, Context: config.Context(), PlatformLogWriter: a})
 	if e != nil {
 		return e
@@ -186,6 +200,7 @@ func (a *App) start() error {
 		return e
 	}
 	a.core = instance
+	a.startLogStream()
 	a.trafficTime = time.Time{}
 	a.lastError = ""
 	return nil
@@ -294,6 +309,9 @@ func (a *App) clashCall(method, path string) (any, error) {
 	return v, e
 }
 func (a *App) api(w http.ResponseWriter, r *http.Request) {
+	if a.pageAPI(w, r) {
+		return
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	var result any = map[string]bool{"ok": true}
@@ -509,7 +527,10 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 			a.trafficTime, a.uploadTotal, a.downloadTotal = now, up, down
 			result = map[string]any{"upload": upSpeed, "download": downSpeed, "upload_total": up, "download_total": down, "connections": len(connections)}
 		}
-	case strings.HasPrefix(r.URL.Path, "/api/connections") && (r.Method == "GET" || r.Method == "DELETE"):
+	case strings.HasPrefix(r.URL.Path, "/api/connections") && r.Method == "DELETE":
+		http.Error(w, "closing connections is not implemented", http.StatusNotImplemented)
+		return
+	case strings.HasPrefix(r.URL.Path, "/api/connections") && r.Method == "GET":
 		suffix := strings.TrimPrefix(r.URL.Path, "/api/connections")
 		result, err = a.clashCall(r.Method, "/connections"+suffix)
 	case r.URL.Path == "/api/nodes" && r.Method == "GET":
