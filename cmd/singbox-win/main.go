@@ -31,15 +31,17 @@ import (
 	"time"
 )
 
-const version = "0.5.0"
+const version = "0.5.1"
 
 type Profile struct {
-	ID      string    `json:"id"`
-	Name    string    `json:"name"`
-	Type    string    `json:"type"`
-	URL     string    `json:"url,omitempty"`
-	Updated time.Time `json:"updated"`
-	Enabled bool      `json:"enabled"`
+	AutoUpdate    *bool     `json:"auto_update,omitempty"`
+	UpdateMinutes int       `json:"update_minutes,omitempty"`
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Type          string    `json:"type"`
+	URL           string    `json:"url,omitempty"`
+	Updated       time.Time `json:"updated"`
+	Enabled       bool      `json:"enabled"`
 }
 type Settings struct {
 	AutoStart   bool                  `json:"auto_start"`
@@ -279,14 +281,7 @@ func (a *App) refresh(p *Profile) error {
 	if e != nil {
 		return e
 	}
-	if _, e = config.Parse(b); e != nil {
-		return e
-	}
-	if e = os.WriteFile(a.profilePath(p.ID), b, 0600); e != nil {
-		return e
-	}
-	p.Updated = time.Now()
-	return a.save()
+	return a.replaceProfile(p, b)
 }
 func (a *App) clashCall(method, path string) (any, error) {
 	if a.core == nil {
@@ -430,39 +425,19 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case len(parts) == 2 && parts[1] == "update" && r.Method == "POST":
 			err = a.refresh(p)
+		case len(parts) == 1 && r.Method == "GET":
+			var data []byte
+			data, err = os.ReadFile(a.profilePath(p.ID))
+			if err == nil {
+				result = map[string]any{"profile": p, "content": string(data)}
+			}
 		case len(parts) == 1 && r.Method == "DELETE":
-			if p.Enabled && a.core != nil {
-				err = errors.New("请先停止内核")
-				break
-			}
-			if err = os.Remove(a.profilePath(p.ID)); err == nil {
-				a.settings.Profiles = append(a.settings.Profiles[:idx], a.settings.Profiles[idx+1:]...)
-				err = a.save()
-			}
+			err = a.deleteProfile(idx)
 		case len(parts) == 1 && r.Method == "PUT":
-			var b struct {
-				Name    *string `json:"name"`
-				Enabled *bool   `json:"enabled"`
+			var b profileEdit
+			if err = decode(r, &b); err == nil {
+				err = a.editProfile(idx, b)
 			}
-			if err = decode(r, &b); err != nil {
-				break
-			}
-			if b.Enabled != nil && a.core != nil {
-				err = errors.New("请先停止内核再切换配置")
-				break
-			}
-			if b.Name != nil && strings.TrimSpace(*b.Name) != "" {
-				p.Name = *b.Name
-			}
-			if b.Enabled != nil {
-				if *b.Enabled {
-					for i := range a.settings.Profiles {
-						a.settings.Profiles[i].Enabled = false
-					}
-				}
-				p.Enabled = *b.Enabled
-			}
-			err = a.save()
 		default:
 			http.Error(w, "method not allowed", 405)
 			return
@@ -555,7 +530,9 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		a.lastError = string([]rune(err.Error())[:min(500, len([]rune(err.Error())))])
+		if strings.HasPrefix(r.URL.Path, "/api/core/") {
+			a.lastError = string([]rune(err.Error())[:min(500, len([]rune(err.Error())))])
+		}
 		http.Error(w, err.Error(), 400)
 		return
 	}
@@ -670,7 +647,7 @@ func main() {
 		a.mu.Unlock()
 	}
 	go func() {
-		t := time.NewTicker(time.Hour)
+		t := time.NewTicker(time.Minute)
 		defer t.Stop()
 		for {
 			select {
@@ -680,7 +657,7 @@ func main() {
 				a.mu.Lock()
 				for i := range a.settings.Profiles {
 					p := &a.settings.Profiles[i]
-					if a.settings.UpdateHours > 0 && p.URL != "" && time.Since(p.Updated) >= time.Duration(a.settings.UpdateHours)*time.Hour {
+					if interval := a.updateInterval(*p); interval > 0 && time.Since(p.Updated) >= interval {
 						if e := a.refresh(p); e != nil {
 							a.WriteMessage(blog.LevelError, e.Error())
 						}

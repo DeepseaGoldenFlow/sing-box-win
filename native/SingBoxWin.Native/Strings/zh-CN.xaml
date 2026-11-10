@@ -140,4 +140,21 @@
  <x:String x:Key="Check Internet">检查 Google 连通性</x:String>
  <x:String x:Key="Internet OK">Google 可通过本地代理访问</x:String>
  <x:String x:Key="Internet Failed">代理连通性检查失败</x:String>
+ <x:String x:Key="Edit Profile">编辑配置</x:String>
+ <x:String x:Key="Manage Profiles">管理全部配置</x:String>
+ <x:String x:Key="View Content">查看内容</x:String>
+ <x:String x:Key="Export Profile">导出配置</x:String>
+ <x:String x:Key="Delete Profile">删除配置</x:String>
+ <x:String x:Key="Profile Auto Update">自动更新</x:String>
+ <x:String x:Key="Update Minutes">自动更新间隔（分钟）</x:String>
+ <x:String x:Key="Last Updated">最后更新</x:String>
+ <x:String x:Key="Save">保存</x:String>
+ <x:String x:Key="Name Required">配置名称不能为空</x:String>
+ <x:String x:Key="Invalid Interval">请输入有效的整数更新间隔</x:String>
+ <x:String x:Key="Local Content Hint">编辑 JSON 配置；保存前会校验，运行中的配置保存后会重新加载。</x:String>
+ <x:String x:Key="Remote Content Hint">远程配置内容只读；请在编辑配置中修改订阅 URL，然后更新。</x:String>
+ <x:String x:Key="Delete Active Hint">删除当前配置会先停止服务并恢复系统代理。删除前会保留本地恢复副本。是否继续？</x:String>
+ <x:String x:Key="Delete Profile Hint">确定删除此配置？删除前会保留本地恢复副本。</x:String>
+ <x:String x:Key="Update Complete">配置已更新</x:String>
+ <x:String x:Key="Update Applied">已校验并保存配置。若此配置正在使用，已重新加载。</x:String>
 </ResourceDictionary>

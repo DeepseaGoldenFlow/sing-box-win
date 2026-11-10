@@ -140,4 +140,21 @@
  <x:String x:Key="Check Internet">Check Google connectivity</x:String>
  <x:String x:Key="Internet OK">Google is reachable through the local proxy</x:String>
  <x:String x:Key="Internet Failed">Proxy connectivity check failed</x:String>
+ <x:String x:Key="Edit Profile">Edit profile</x:String>
+ <x:String x:Key="Manage Profiles">Manage profiles</x:String>
+ <x:String x:Key="View Content">View content</x:String>
+ <x:String x:Key="Export Profile">Export</x:String>
+ <x:String x:Key="Delete Profile">Delete profile</x:String>
+ <x:String x:Key="Profile Auto Update">Automatic update</x:String>
+ <x:String x:Key="Update Minutes">Update interval (minutes)</x:String>
+ <x:String x:Key="Last Updated">Last updated</x:String>
+ <x:String x:Key="Save">Save</x:String>
+ <x:String x:Key="Name Required">A profile name is required.</x:String>
+ <x:String x:Key="Invalid Interval">Enter a valid update interval in whole minutes.</x:String>
+ <x:String x:Key="Local Content Hint">Edit JSON. Saved content is validated and active profiles are reloaded.</x:String>
+ <x:String x:Key="Remote Content Hint">Remote content is read-only. Edit the subscription URL, then update.</x:String>
+ <x:String x:Key="Delete Active Hint">Deleting the active profile stops the service and restores the system proxy. A local recovery copy is retained. Continue?</x:String>
+ <x:String x:Key="Delete Profile Hint">Delete this profile? A local recovery copy is retained.</x:String>
+ <x:String x:Key="Update Complete">Profile updated</x:String>
+ <x:String x:Key="Update Applied">The profile was validated and saved. Active profiles have been reloaded.</x:String>
 </ResourceDictionary>

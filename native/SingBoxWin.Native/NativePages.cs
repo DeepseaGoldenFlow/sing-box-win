@@ -55,6 +55,8 @@ public sealed partial class MainWindow
         if (stop is not null) Enable(stop, session.IsSwitchable && session.IsConnectedStrict);
         if (restart is not null) Enable(restart, session.IsSwitchable && session.IsConnectedStrict);
         if (profilePicker is not null) profilePicker.IsEnabled = session.IsSwitchable;
+        foreach (var action in profileActions) action.IsEnabled = connected && S(state, "profile") != "" && !acting;
+        if (profileUpdateButton is not null) profileUpdateButton.IsEnabled = profileUpdateButton.IsEnabled && selectedProfileRemote;
         foreach (var card in dashboardCards) card.Value.Visibility = CardEnabled(card.Key) && (card.Key is "Status" or "Profile" || session.IsConnected) ? Visibility.Visible : Visibility.Collapsed;
     }
     private bool CardEnabled(string key) => key == "Profile" || preferences["cards"]?[key]?.GetValue<bool>() != false;
@@ -93,11 +95,14 @@ public sealed partial class MainWindow
         var profiles = new StackPanel { Spacing = 12 }; profilePicker = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, PlaceholderText = T("Select Profile") };
         profilePicker.SelectionChanged += async (_, _) => { if (pickingProfile || profilePicker.SelectedItem is not ComboBoxItem item) return; await Run(async () => { transition = Session.IsConnectedStrict ? ConnectionPhase.Reasserting : null; UpdateControls(); try { await api.Call("native/profile", HttpMethod.Put, new { id = (string)item.Tag }); } finally { transition = null; } }); await Refresh(); };
         profiles.Children.Add(profilePicker);
-        profiles.Children.Add(Row(Button(T("Import Profile"), Import), Button(T("Update Profile"), async () => {
-            if (profilePicker.SelectedItem is ComboBoxItem selected) {
-                await api.Call("profiles/" + (string)selected.Tag + "/update", HttpMethod.Post);
-            }
-        }))); AddDashboardCard(body, "Profile", profiles);
+        profileActions.Clear();
+        profileSummary = Text("", 12, "#9A9AA0"); profiles.Children.Add(profileSummary);
+        profiles.Children.Add(Row(Button(T("Import Profile"), Import), ProfileAction("Edit Profile", () => EditProfile(SelectedProfileID())),
+            profileUpdateButton = ProfileAction("Update Profile", () => UpdateProfile(SelectedProfileID()))));
+        profiles.Children.Add(Row(Button(T("Manage Profiles"), ManageProfiles), ProfileAction("View Content", () => ProfileContent(SelectedProfileID())),
+            ProfileAction("Export Profile", () => ExportProfile(SelectedProfileID())), ProfileAction("Delete", () => DeleteProfile(SelectedProfileID()))));
+        AddDashboardCard(body, "Profile", profiles);
+        var profileCard = dashboardCards["Profile"]; body.Children.Remove(profileCard); body.Children.Insert(0, profileCard);
         PairDashboardCards(body, "Status", "Connections");
         PairDashboardCards(body, "Upload", "Download");
         UpdateControls();
@@ -143,6 +148,11 @@ public sealed partial class MainWindow
         up!.Text = "↑ " + Bytes(N(traffic, "upload")) + "/s"; down!.Text = "↓ " + Bytes(N(traffic, "download")) + "/s";
         uploadTotal!.Text = Bytes(N(traffic, "upload_total")); downloadTotal!.Text = Bytes(N(traffic, "download_total"));
         samples.Enqueue((N(traffic, "upload"), N(traffic, "download"))); while (samples.Count > 60) samples.Dequeue(); DrawChart();
+        if (profileSummary is not null) {
+            var current = profiles?.FirstOrDefault(p => B(p, "enabled"));
+            selectedProfileRemote = S(current, "url") != "";
+            profileSummary.Text = current is null ? T("NoProfile") : T(S(current, "type") == "remote" ? "Remote" : "Local") + " · " + T("Last Updated") + ": " + Date(S(current, "updated"));
+        }
         if (profilePicker is not null && !profilePicker.IsDropDownOpen) {
             pickingProfile = true; profilePicker.Items.Clear();
             if (profiles is not null) foreach (var p in profiles) { var item = new ComboBoxItem { Content = S(p, "name"), Tag = S(p, "id") }; profilePicker.Items.Add(item); if (B(p, "enabled")) profilePicker.SelectedItem = item; }
