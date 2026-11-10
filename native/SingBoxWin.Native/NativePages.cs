@@ -26,6 +26,7 @@ public sealed partial class MainWindow
     private CancellationTokenSource? searchDelay;
     private readonly Dictionary<string, JsonObject> connectionHistory = new();
     private StackPanel? groupsPanel;
+    private TextBlock? routingSummary;
     private void LoadPreferences()
     {
         try { preferences = JsonNode.Parse(System.IO.File.ReadAllText(prefsPath)) as JsonObject ?? new(); } catch { preferences = new(); }
@@ -162,13 +163,20 @@ public sealed partial class MainWindow
     }
     private void RenderGroups(StackPanel body)
     {
+        routingSummary=Text("",13,"#9A9AA0");body.Children.Add(routingSummary);
+        body.Children.Add(Text(T("Groups Routing Hint"),12,"#9A9AA0"));
         body.Children.Add(Button(T("TestLatency"), async () => { await api.Call("groups/urltest", HttpMethod.Post); }));
         groupsPanel = new StackPanel { Spacing = 16 }; body.Children.Add(groupsPanel);
     }
     private static string StrategyKey(string type) => type switch { "URLTest" => "StrategyURLTest", "Fallback" => "StrategyFallback", "LoadBalance" => "StrategyLoadBalance", "Relay" => "StrategyRelay", "Selector" => "StrategySelector", _ => "StrategyOther" };
     private async Task RefreshGroups()
     {
-        var groups = await api.Call("groups") as JsonArray; if (page != "Groups" || groupsPanel is null) return;
+        var groups = await api.Call("groups") as JsonArray;
+        var routing = await api.Call("routing");
+        if (page != "Groups" || groupsPanel is null) return;
+        string mode = S(routing,"mode").ToLowerInvariant();
+        routingSummary!.Text = T(mode switch { "rule" => "Rule Mode", "global" => "Global Mode", "direct" => "Direct Mode", _ => "Unknown Mode" })
+            + $" · {T("Route Rules")}: {N(routing,"rules_count"):0} · {T("Final Outbound")}: {S(routing,"final")}";
         groupsPanel.Children.Clear(); if (groups is null || groups.Count == 0) { groupsPanel.Children.Add(Text(T("No data"))); return; }
         foreach (var g in groups) {
             string tag = S(g, "tag"), type = S(g, "type"), selected = S(g, "selected");

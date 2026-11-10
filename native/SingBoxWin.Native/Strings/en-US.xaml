@@ -157,4 +157,11 @@
  <x:String x:Key="Delete Profile Hint">Delete this profile? A local recovery copy is retained.</x:String>
  <x:String x:Key="Update Complete">Profile updated</x:String>
  <x:String x:Key="Update Applied">The profile was validated and saved. Active profiles have been reloaded.</x:String>
+ <x:String x:Key="Groups Routing Hint">Groups choose nodes for traffic routed to them. Direct and block rules still follow the profile.</x:String>
+ <x:String x:Key="Rule Mode">Rule mode</x:String>
+ <x:String x:Key="Global Mode">Global mode</x:String>
+ <x:String x:Key="Direct Mode">Direct mode</x:String>
+ <x:String x:Key="Unknown Mode">Unknown mode</x:String>
+ <x:String x:Key="Route Rules">Routing rules</x:String>
+ <x:String x:Key="Final Outbound">Final outbound</x:String>
 </ResourceDictionary>

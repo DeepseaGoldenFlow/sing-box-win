@@ -97,3 +97,7 @@ Checks require the build tags from the Makefile, including `with_gvisor`.
 - 清空配置后仍可导入；不存在配置时禁用相关操作，本地配置禁用订阅更新。
 
 详见 [v0.5.1 验证](docs/v051-validation.md)。二维码/深链分享和图形规则编辑未在本次实现。
+
+### v0.5.2 组与路由状态
+
+组列表按当前配置的 outbounds 顺序显示真实策略组，不再把 Clash API 合成的 GLOBAL/Fallback 当成订阅里的组。配置明确命名为 GLOBAL 的真实组仍正常显示。组页顶部从运行中的内核读取实际模式，并显示规则数及默认出口。Selector 可手动选择，URLTest 自动选择。此版本不改写订阅路由规则。

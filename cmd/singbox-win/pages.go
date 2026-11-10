@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +46,10 @@ type Group struct {
 }
 
 func (a *App) groups() ([]Group, error) {
+	profile, e := a.profileRouting()
+	if e != nil {
+		return nil, e
+	}
 	value, e := a.clashCall("GET", "/proxies")
 	if e != nil {
 		return nil, e
@@ -70,8 +73,8 @@ func (a *App) groups() ([]Group, error) {
 		return 0
 	}
 	out := make([]Group, 0)
-	for tag, v := range proxies {
-		p, ok := v.(map[string]any)
+	for _, tag := range configuredGroupOrder(profile) {
+		p, ok := proxies[tag].(map[string]any)
 		if !ok {
 			continue
 		}
@@ -99,7 +102,6 @@ func (a *App) groups() ([]Group, error) {
 		}
 		out = append(out, g)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Tag < out[j].Tag })
 	return out, nil
 }
 func (a *App) unavailable(w http.ResponseWriter, err error) {

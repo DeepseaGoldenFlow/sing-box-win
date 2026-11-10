@@ -31,7 +31,7 @@ import (
 	"time"
 )
 
-const version = "0.5.1"
+const version = "0.5.2"
 
 type Profile struct {
 	AutoUpdate    *bool     `json:"auto_update,omitempty"`
@@ -346,6 +346,8 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		result = a.testConnectivity("https://www.google.com/generate_204")
 	case r.URL.Path == "/api/tools/info" && r.Method == "GET":
 		result = a.toolsInfo()
+	case r.URL.Path == "/api/routing" && r.Method == "GET":
+		result, err = a.routingInfo()
 	case r.URL.Path == "/api/state" && r.Method == "GET":
 		name := ""
 		for _, p := range a.settings.Profiles {

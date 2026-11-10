@@ -157,4 +157,11 @@
  <x:String x:Key="Delete Profile Hint">确定删除此配置？删除前会保留本地恢复副本。</x:String>
  <x:String x:Key="Update Complete">配置已更新</x:String>
  <x:String x:Key="Update Applied">已校验并保存配置。若此配置正在使用，已重新加载。</x:String>
+ <x:String x:Key="Groups Routing Hint">策略组决定匹配到该组的流量使用哪个节点；直连、拦截等仍按配置规则执行。</x:String>
+ <x:String x:Key="Rule Mode">规则模式</x:String>
+ <x:String x:Key="Global Mode">全局模式</x:String>
+ <x:String x:Key="Direct Mode">直连模式</x:String>
+ <x:String x:Key="Unknown Mode">未知模式</x:String>
+ <x:String x:Key="Route Rules">路由规则</x:String>
+ <x:String x:Key="Final Outbound">默认出口</x:String>
 </ResourceDictionary>
