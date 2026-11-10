@@ -85,14 +85,38 @@ public sealed partial class MainWindow
         if (active && B(state, "running")) await Core("stop");
         await api.Call("profiles/" + id, HttpMethod.Delete);
     }
+    // Export offers JSON or BPF; the engine renders both so the BPF container
+    // always matches upstream libbox. The file name carries profile name +
+    // timestamp, matching SFM's SaveFile/ShareFile behaviour.
     private async Task ExportProfile(string id)
     {
         var detail = await api.Call("profiles/" + id);
-        var picker = new FileSavePicker { SuggestedFileName = "sing-box-config" };
-        picker.FileTypeChoices.Add("JSON", new List<string> { ".json" });
+        string name = S(detail?["profile"], "name");
+        var choice = new ContentDialog {
+            XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = T("Export Profile"),
+            Content = Text(T("Export Format Hint"), 13), PrimaryButtonText = T("BPF"), SecondaryButtonText = T("JSON"),
+            CloseButtonText = T("Cancel"), DefaultButton = ContentDialogButton.Secondary
+        };
+        var result = await choice.ShowAsync();
+        if (result == ContentDialogResult.None) return;
+        await SaveProfileFile(id, string.IsNullOrWhiteSpace(name) ? "profile" : name, result == ContentDialogResult.Primary ? "bpf" : "json");
+    }
+
+    // SaveProfileFile streams the engine-rendered bytes (JSON or BPF) to disk.
+    // The picker's default name carries profile name + timestamp, matching
+    // SFM's SaveFile/ShareFile behaviour, and the engine picks the final name.
+    private async Task SaveProfileFile(string id, string name, string format)
+    {
+        var picker = new FileSavePicker { SuggestedFileName = $"{name}-{DateTime.Now:yyyyMMdd-HHmmss}" };
+        picker.FileTypeChoices.Add(format == "bpf" ? "BPF" : "JSON", new List<string> { "." + format });
         WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
         var file = await picker.PickSaveFileAsync();
-        if (file is not null) await Windows.Storage.FileIO.WriteTextAsync(file, S(detail, "content"));
+        if (file is null) return;
+        using var response = await api.Raw("profiles/" + id + "/export?format=" + format);
+        if (!response.IsSuccessStatusCode) throw new InvalidOperationException((await response.Content.ReadAsStringAsync()).Trim());
+        using var stream = await file.OpenStreamForWriteAsync();
+        stream.SetLength(0);
+        await response.Content.CopyToAsync(stream);
     }
     private async Task ManageProfiles()
     {

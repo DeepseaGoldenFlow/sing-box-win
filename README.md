@@ -47,7 +47,7 @@ Clash 控制器另开随机 loopback 端口并配置每次启动随机密钥。U
 
 ## P1.5 sing-box for Windows
 
-Windows 使用当前用户命名互斥实现单实例；二次启动会通过 `runtime.json` 的 loopback 地址通知现有实例重新打开界面，深链参数也会转交。Linux 自检使用 flock，强杀不会留下阻塞锁。Settings 可一键注册/取消 `singboxwin://install-config?url=<encoded>`；Profiles 的「复制导入链接」使用输入框中的订阅 URL。导入链接含订阅地址，分享前请确认是否含凭据。
+Windows 使用当前用户命名互斥实现单实例；二次启动会通过 `runtime.json` 的 loopback 地址通知现有实例重新打开界面，深链参数也会转交。Linux 自检使用 flock，强杀不会留下阻塞锁。引擎通过 `POST /api/protocol {"enabled":true|false}` 注册/取消 `sing-box://import-remote-profile?url=<encoded>#<name>`（标准 scheme）与历史 `singboxwin://install-config?url=<encoded>`，同时注册 `.bpf` 默认处理程序和 `.json` 的「打开方式」项；注册表清单、卸载恢复与验证脚本见 [`docs/windows-file-associations.md`](docs/windows-file-associations.md)。引擎按标准格式生成分享链接（`generateFmtDeepLink`）。导入链接含订阅地址，分享前请确认是否含凭据。
 
 节点卡片列出当前配置的全部分组（`Selector` 以及 `URLTest` / `Fallback` / `LoadBalance` / `Relay` 等自动策略组）、成员、当前选择和延迟；运行时使用 Clash API 测速，停止时仍能读取配置分组。只有 `Selector` 组的成员行可以点击切换（`PUT /proxies/{group}`）；自动策略组的成员行是只读的，组头标明当前策略（如「URLTest 自动选择（最低延迟）」）与「只读」，当前生效节点按 `now` 字段高亮，点击不会向后端发请求，因此不再出现 `Clash API 400: Must be a Selector` 报错。
 

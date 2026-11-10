@@ -46,4 +46,14 @@ public sealed class EngineClient
         if (!response.IsSuccessStatusCode) throw new InvalidOperationException(text.Trim());
         return string.IsNullOrWhiteSpace(text) ? null : JsonNode.Parse(text);
     }
+    // Raw returns the response itself for binary payloads (profile export).
+    // The caller owns disposal. It reuses the same client, so redirects stay
+    // disabled and the engine's 127.0.0.1 origin check cannot be bypassed.
+    public async Task<HttpResponseMessage> Raw(string path)
+    {
+        if (endpoint is null) throw new InvalidOperationException("Engine is offline.");
+        var response = await http.GetAsync(new Uri(endpoint, "api/" + path), HttpCompletionOption.ResponseHeadersRead);
+        if (response.StatusCode == HttpStatusCode.NotFound) { response.Dispose(); throw new FileNotFoundException("Profile not found."); }
+        return response;
+    }
 }

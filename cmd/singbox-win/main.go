@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -331,15 +332,50 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch {
 	case r.URL.Path == "/api/activate" && r.Method == "POST":
-		var b struct{ Link string }
+		var b activationPayload
 		err = decode(r, &b)
 		if err == nil && b.Link != "" {
 			err = a.importLink(b.Link)
+		} else if err == nil && b.Path != "" {
+			_, err = a.importProfileFile(b.Path)
+		}
+		if err != nil {
+			// The second process just shows this error and exits; record it so the
+			// already-running UI explains what went wrong with the clicked link/file.
+			a.lastError = truncateError(err)
 		}
 	case r.URL.Path == "/api/protocol" && r.Method == "POST":
 		var b struct{ Enabled bool }
 		if err = decode(r, &b); err == nil {
 			err = platform.RegisterProtocol(b.Enabled)
+		}
+		if err == nil {
+			err = platform.RegisterFileAssociations(b.Enabled)
+		}
+	case (r.URL.Path == "/api/profiles/import/file" || r.URL.Path == "/api/profiles/import/bpf") && r.Method == "POST":
+		// The native client cannot hand the engine a path to a file it opened
+		// inside the FileOpenPicker (that is a broker handle), so it reads bytes
+		// and posts them base64-encoded. Content decides the format, as for paths,
+		// and "name" overrides the name derived from the file.
+		var b struct {
+			Name string `json:"name"`
+			Path string `json:"path"`
+			Data string `json:"data"` // base64 container bytes
+		}
+		if err = decode(r, &b); err != nil {
+			break
+		}
+		var data []byte
+		if strings.TrimSpace(b.Data) != "" {
+			data, err = base64.StdEncoding.DecodeString(strings.TrimSpace(b.Data))
+		} else if strings.TrimSpace(b.Path) != "" {
+			result, err = a.importProfileFile(b.Path)
+			break
+		} else {
+			err = errors.New("请选择要导入的文件")
+		}
+		if err == nil {
+			result, err = a.importProfileBytes(data, b.Name)
 		}
 	case r.URL.Path == "/api/logs" && r.Method == "DELETE":
 		a.logMu.Lock()
@@ -419,14 +455,19 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		if err = decode(r, &b); err != nil {
 			break
 		}
+		// A path may point at JSON or BPF; content decides, matching file import.
+		// A supplied name wins over the file name, and uniqueProfileName keeps it
+		// from colliding with an existing profile.
+		if b.URL == "" && b.Path != "" {
+			result, err = a.importProfilePath(b.Path, b.Name)
+			break
+		}
 		var data []byte
 		typ := "local"
 		switch {
 		case b.URL != "":
 			data, err = fetch(b.URL)
 			typ = "remote"
-		case b.Path != "":
-			data, err = os.ReadFile(b.Path)
 		default:
 			data = []byte(b.Content)
 		}
@@ -439,18 +480,13 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		if strings.TrimSpace(b.Name) == "" {
 			b.Name = "新配置"
 		}
-		p := Profile{ID: id(), Name: b.Name, URL: b.URL, Type: typ, Updated: time.Now(), Enabled: len(a.settings.Profiles) == 0}
+		imp := profileImport{Name: b.Name, Type: typ, URL: b.URL, Data: data}
 		if typ == "remote" {
 			enabled := true
-			p.AutoUpdate = &enabled
-			p.UpdateMinutes = 60
+			imp.AutoUpdate = &enabled
+			imp.UpdateMinutes = 60
 		}
-		if err = os.WriteFile(a.profilePath(p.ID), data, 0600); err != nil {
-			break
-		}
-		a.settings.Profiles = append(a.settings.Profiles, p)
-		err = a.save()
-		result = p
+		result, err = a.addProfile(imp)
 	case strings.HasPrefix(r.URL.Path, "/api/profiles/"):
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/profiles/"), "/")
 		idx := -1
@@ -466,6 +502,20 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		}
 		p := &a.settings.Profiles[idx]
 		switch {
+		case len(parts) == 2 && parts[1] == "export" && r.Method == "GET":
+			var data []byte
+			var name string
+			data, name, err = a.exportProfile(*p, r.URL.Query().Get("format"))
+			if err != nil {
+				break
+			}
+			// Profile names are usually Chinese; RFC 5987 carries them, and the ASCII
+			// fallback keeps older clients happy. The native client picks its own name.
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Header().Set("Content-Disposition", `attachment; filename="`+asciiFilename(name)+`"; filename*=UTF-8''`+url.PathEscape(name))
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			_, err = w.Write(data)
+			return
 		case len(parts) == 2 && parts[1] == "update" && r.Method == "POST":
 			err = a.refresh(p)
 		case len(parts) == 1 && r.Method == "GET":
@@ -577,7 +627,7 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		if strings.HasPrefix(r.URL.Path, "/api/core/") {
-			a.lastError = string([]rune(err.Error())[:min(500, len([]rune(err.Error())))])
+			a.lastError = truncateError(err)
 		}
 		http.Error(w, err.Error(), 400)
 		return
@@ -652,8 +702,13 @@ func main() {
 		}
 	}
 	for _, arg := range os.Args[1:] {
-		if strings.HasPrefix(arg, "singboxwin:") {
+		switch {
+		case isDeepLinkArg(arg):
 			if e := a.importLink(arg); e != nil {
+				a.lastError = e.Error()
+			}
+		case fileAssociationArg(arg):
+			if _, e := a.importProfileFile(arg); e != nil {
 				a.lastError = e.Error()
 			}
 		}

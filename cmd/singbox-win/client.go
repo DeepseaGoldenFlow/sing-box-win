@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/JARVIS/sing-box-win/internal/config"
 	"github.com/JARVIS/sing-box-win/internal/platform"
 	"io"
 	"net/http"
@@ -49,6 +48,14 @@ func (a *App) restoreProxy() error {
 	}
 	return nil
 }
+
+// activationPayload is what a second instance (or the native client) forwards
+// to the running engine: either a deep link or a file opened via association.
+type activationPayload struct {
+	Link string `json:"link"`
+	Path string `json:"path"`
+}
+
 func activateExisting(dir string) error {
 	var last error
 	for i := 0; i < 600; i++ {
@@ -62,13 +69,16 @@ func activateExisting(dir string) error {
 			if err != nil || u.Scheme != "http" || !strings.HasPrefix(u.Host, "127.0.0.1:") {
 				return errors.New("invalid runtime URL")
 			}
-			link := ""
+			payload := activationPayload{}
 			for _, v := range os.Args[1:] {
-				if strings.HasPrefix(v, "singboxwin:") {
-					link = v
+				switch {
+				case isDeepLinkArg(v):
+					payload.Link = v
+				case fileAssociationArg(v):
+					payload.Path = v
 				}
 			}
-			body, _ := json.Marshal(map[string]string{"link": link})
+			body, _ := json.Marshal(payload)
 			c := http.Client{Timeout: 60 * time.Second}
 			resp, err := c.Post(r.URL+"/api/activate", "application/json", bytes.NewReader(body))
 			if err == nil {
@@ -86,33 +96,12 @@ func activateExisting(dir string) error {
 	}
 	return fmt.Errorf("activate existing instance: %w", last)
 }
+
+// importLink imports a deep link. Both the standard sing-box scheme and the
+// legacy singboxwin scheme are accepted; see deeplink.go.
 func (a *App) importLink(link string) error {
-	u, e := url.Parse(link)
-	if e != nil {
-		return e
-	}
-	if u.Scheme != "singboxwin" || u.Host != "install-config" {
-		return errors.New("unsupported deep link")
-	}
-	source := u.Query().Get("url")
-	data, e := fetch(source)
-	if e != nil {
-		return e
-	}
-	if _, e = config.Parse(data); e != nil {
-		return e
-	}
-	name := u.Query().Get("name")
-	if name == "" {
-		name = "Imported subscription"
-	}
-	auto := true
-	p := Profile{AutoUpdate: &auto, UpdateMinutes: 60, ID: id(), Name: name, URL: source, Type: "remote", Updated: time.Now(), Enabled: len(a.settings.Profiles) == 0}
-	if e = os.WriteFile(a.profilePath(p.ID), data, 0600); e != nil {
-		return e
-	}
-	a.settings.Profiles = append(a.settings.Profiles, p)
-	return a.save()
+	_, e := a.importDeepLink(link)
+	return e
 }
 func (a *App) nodeList() (any, error) {
 	if a.core != nil {

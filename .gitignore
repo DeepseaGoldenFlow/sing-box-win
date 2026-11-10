@@ -6,3 +6,5 @@ bin/
 *.user
 *.dmp
 *.log
+# Runtime database created by tests that start the core (experimental.cache_file).
+cache.db

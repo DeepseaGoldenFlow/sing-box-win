@@ -189,4 +189,12 @@
  <x:String x:Key="Test Node">Test node latency</x:String>
  <x:String x:Key="Test Group">Test group</x:String>
  <x:String x:Key="Routing Mode">Routing mode</x:String>
+ <x:String x:Key="Import File">Import file (JSON or BPF)</x:String>
+ <x:String x:Key="BPF File Selected">BPF binary profile selected</x:String>
+ <x:String x:Key="BPF File Hint">BPF is sing-box's binary profile container; the engine decodes it and it cannot be previewed.</x:String>
+ <x:String x:Key="JSON File Hint">The JSON configuration is validated before import.</x:String>
+ <x:String x:Key="Choose File First">Choose a file to import first.</x:String>
+ <x:String x:Key="Export Format Hint">JSON is human-readable and editable; BPF is sing-box's standard binary format, readable by SFM and other official clients.</x:String>
+ <x:String x:Key="BPF">BPF</x:String>
+ <x:String x:Key="JSON">JSON</x:String>
 </ResourceDictionary>

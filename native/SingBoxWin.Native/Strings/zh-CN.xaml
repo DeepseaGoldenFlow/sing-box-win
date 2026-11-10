@@ -189,4 +189,12 @@
  <x:String x:Key="Test Node">测试此节点延迟</x:String>
  <x:String x:Key="Test Group">测试此组</x:String>
  <x:String x:Key="Routing Mode">路由模式</x:String>
+ <x:String x:Key="Import File">从文件导入（JSON 或 BPF）</x:String>
+ <x:String x:Key="BPF File Selected">已选择 BPF 二进制配置</x:String>
+ <x:String x:Key="BPF File Hint">BPF 为 sing-box 二进制配置，内容由内核解析，不支持预览。</x:String>
+ <x:String x:Key="JSON File Hint">JSON 配置会先校验再导入。</x:String>
+ <x:String x:Key="Choose File First">请先选择要导入的文件</x:String>
+ <x:String x:Key="Export Format Hint">JSON 便于阅读与编辑；BPF 为 sing-box 标准二进制格式，可被 SFM 等官方客户端直接读取。</x:String>
+ <x:String x:Key="BPF">BPF</x:String>
+ <x:String x:Key="JSON">JSON</x:String>
 </ResourceDictionary>
