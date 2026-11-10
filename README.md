@@ -47,9 +47,9 @@ Clash 控制器另开随机 loopback 端口并配置每次启动随机密钥。U
 
 Windows 使用当前用户命名互斥实现单实例；二次启动会通过 `runtime.json` 的 loopback 地址通知现有实例重新打开界面，深链参数也会转交。Linux 自检使用 flock，强杀不会留下阻塞锁。Settings 可一键注册/取消 `singboxwin://install-config?url=<encoded>`；Profiles 的「复制导入链接」使用输入框中的订阅 URL。导入链接含订阅地址，分享前请确认是否含凭据。
 
-节点卡片列出当前配置的 selector/urltest 分组、成员、当前选择和延迟；运行时使用 Clash API 切换 selector 及测速，停止时仍能读取配置分组。urltest 的选择由内核自动管理，手动切换被内核拒绝时显示原文错误。
+节点卡片列出当前配置的全部分组（`Selector` 以及 `URLTest` / `Fallback` / `LoadBalance` / `Relay` 等自动策略组）、成员、当前选择和延迟；运行时使用 Clash API 测速，停止时仍能读取配置分组。只有 `Selector` 组的成员行可以点击切换（`PUT /proxies/{group}`）；自动策略组的成员行是只读的，组头标明当前策略（如「URLTest 自动选择（最低延迟）」）与「只读」，当前生效节点按 `now` 字段高亮，点击不会向后端发请求，因此不再出现 `Clash API 400: Must be a Selector` 报错。
 
-界面按 SFM 的侧栏与卡片层级整理：16px 线性图标导航、浅蓝选中态、28px 内容边距、16px 卡片间隔、18px 卡片内距、单一主操作、上下行双曲线、中英及深浅色切换。截图取自 Windows 交互会话里真实运行的原生客户端（`build/native/SingBoxWin.Native.exe`）：[仪表](docs/screenshots/native-01-overview.png)、[组](docs/screenshots/native-02-groups.png)、[连接](docs/screenshots/native-03-connections.png)、[日志](docs/screenshots/native-04-logs.png)、[工具](docs/screenshots/native-05-tools.png)、[设置](docs/screenshots/native-06-settings.png)；另有[任务栏图标](docs/screenshots/native-07-taskbar-icon.png)、[程序图标](docs/screenshots/native-09-exe-icon.png) 与[图标各尺寸阶梯](docs/screenshots/native-10-icon-sizes.png)（16→256，浅色与深色任务栏各一行）。
+界面按 SFM 的侧栏与卡片层级整理：16px 线性图标导航、浅蓝选中态、28px 内容边距、16px 卡片间隔、18px 卡片内距、单一主操作、上下行双曲线、中英及深浅色切换。截图取自 Windows 交互会话里真实运行的原生客户端（`build/native/SingBoxWin.Native.exe`）：[仪表](docs/screenshots/native-01-overview.png)、[组](docs/screenshots/native-02-groups.png)、[组（自动策略组只读）](docs/screenshots/native-02b-groups-urltest.png)、[连接](docs/screenshots/native-03-connections.png)、[日志](docs/screenshots/native-04-logs.png)、[工具](docs/screenshots/native-05-tools.png)、[设置](docs/screenshots/native-06-settings.png)；另有[任务栏图标](docs/screenshots/native-07-taskbar-icon.png)、[程序图标](docs/screenshots/native-09-exe-icon.png) 与[图标各尺寸阶梯](docs/screenshots/native-10-icon-sizes.png)（16→256，浅色与深色任务栏各一行）。
 
 本版采用纯 Go 后台常驻引擎 + 原生 WinUI 3 界面方案，不提供托盘图标/右键菜单。关闭或最小化窗口后内核继续运行，重新双击 exe 可唤回界面；在 Settings 或侧栏点击退出以停止程序。不增加 cgo、npm 依赖。
 

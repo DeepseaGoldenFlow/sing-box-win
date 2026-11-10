@@ -15,7 +15,12 @@ try {
     Copy-Item 'build\sing-box-win.exe' 'build\native\sing-box-win.exe' -Force
     Write-Host '[4/4] Creating build\native.zip...'
     if (Test-Path 'build\native.zip') { Remove-Item 'build\native.zip' -Force }
-    Compress-Archive -Path 'build\native\*' -DestinationPath 'build\native.zip' -CompressionLevel Optimal
+    if (Get-Command python -ErrorAction SilentlyContinue) {
+        python scripts\make-release-zip.py
+        if ($LASTEXITCODE -ne 0) { throw "make-release-zip.py failed: $LASTEXITCODE" }
+    } else {
+        Write-Warning 'No python; run scripts/make-release-zip.py on the Linux side'
+    }
     $count = (Get-ChildItem 'build\native' -File -Recurse | Measure-Object).Count
     Write-Host "Done: build\native.zip ($count files in build\native)"
 } catch {
