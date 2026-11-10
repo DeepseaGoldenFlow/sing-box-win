@@ -11,9 +11,11 @@ import (
 	"github.com/JARVIS/sing-box-win/internal/config"
 	"github.com/JARVIS/sing-box-win/internal/platform"
 	box "github.com/sagernet/sing-box"
+	"github.com/sagernet/sing-box/adapter"
 	blog "github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json/badoption"
+	"github.com/sagernet/sing/service"
 	"io"
 	"math"
 	"net"
@@ -31,7 +33,7 @@ import (
 	"time"
 )
 
-const version = "0.5.2"
+const version = "0.6.0"
 
 type Profile struct {
 	AutoUpdate    *bool     `json:"auto_update,omitempty"`
@@ -61,22 +63,26 @@ type Log struct {
 	Message string `json:"message"`
 }
 type App struct {
-	logStreamCancel context.CancelFunc
-	nativeLogs      []Log
-	mu              sync.Mutex
-	logMu           sync.Mutex
-	dir             string
-	settings        Settings
-	core            *box.Box
-	logs            []Log
-	lastError       string
-	clash           string
-	secret          string
-	proxy           bool
-	quit            chan struct{}
-	trafficTime     time.Time
-	uploadTotal     float64
-	downloadTotal   float64
+	connectionManager adapter.ConnectionManager
+	endpointMu        sync.RWMutex
+	endpointStates    map[string]endpointSnapshot
+	endpointCancel    context.CancelFunc
+	logStreamCancel   context.CancelFunc
+	nativeLogs        []Log
+	mu                sync.Mutex
+	logMu             sync.Mutex
+	dir               string
+	settings          Settings
+	core              *box.Box
+	logs              []Log
+	lastError         string
+	clash             string
+	secret            string
+	proxy             bool
+	quit              chan struct{}
+	trafficTime       time.Time
+	uploadTotal       float64
+	downloadTotal     float64
 }
 
 func (a *App) WriteMessage(level blog.Level, msg string) {
@@ -109,6 +115,7 @@ func (a *App) save() error {
 func (a *App) profilePath(id string) string { return filepath.Join(a.dir, "profiles", id+".json") }
 func id() string                            { var b [16]byte; _, _ = rand.Read(b[:]); return hex.EncodeToString(b[:]) }
 func (a *App) stop() error {
+	a.stopEndpointStatus()
 	if a.logStreamCancel != nil {
 		a.logStreamCancel()
 		a.logStreamCancel = nil
@@ -181,7 +188,11 @@ func (a *App) start() error {
 	if opt.Experimental == nil {
 		opt.Experimental = &option.ExperimentalOptions{}
 	}
-	opt.Experimental.ClashAPI = &option.ClashAPIOptions{ExternalController: strings.TrimPrefix(a.clash, "http://"), Secret: a.secret}
+	if opt.Experimental.ClashAPI == nil {
+		opt.Experimental.ClashAPI = &option.ClashAPIOptions{}
+	}
+	opt.Experimental.ClashAPI.ExternalController = strings.TrimPrefix(a.clash, "http://")
+	opt.Experimental.ClashAPI.Secret = a.secret
 	native := a.nativeOptions()
 	if native.MemoryLimitMB > 0 {
 		debug.SetMemoryLimit(native.MemoryLimitMB * 1024 * 1024)
@@ -189,7 +200,8 @@ func (a *App) start() error {
 		debug.SetMemoryLimit(math.MaxInt64)
 	}
 	opt.Log = &option.LogOptions{Level: native.LogLevel, Timestamp: true, DisableColor: false}
-	instance, e := box.New(box.Options{Options: opt, Context: config.Context(), PlatformLogWriter: a})
+	coreContext := config.Context()
+	instance, e := box.New(box.Options{Options: opt, Context: coreContext, PlatformLogWriter: a})
 	if e != nil {
 		return e
 	}
@@ -198,6 +210,8 @@ func (a *App) start() error {
 		return e
 	}
 	a.core = instance
+	a.connectionManager = service.FromContext[adapter.ConnectionManager](coreContext)
+	a.startEndpointStatus()
 	a.startLogStream()
 	a.trafficTime = time.Time{}
 	a.lastError = ""
@@ -330,6 +344,7 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/api/logs" && r.Method == "DELETE":
 		a.logMu.Lock()
 		a.logs = nil
+		a.nativeLogs = nil
 		a.logMu.Unlock()
 	case r.URL.Path == "/api/node/list" && r.Method == "GET":
 		result, err = a.nodeList()
@@ -337,6 +352,16 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		var b struct{ Group, Name string }
 		if err = decode(r, &b); err == nil {
 			err = a.selectNode(b.Group, b.Name)
+		}
+	case r.URL.Path == "/api/tools/endpoints" && r.Method == "GET":
+		result, err = a.liveEndpoints()
+	case r.URL.Path == "/api/tools/tailscale/exit-node" && r.Method == "POST":
+		var b struct {
+			Tag string `json:"tag"`
+			ID  string `json:"id"`
+		}
+		if err = decode(r, &b); err == nil {
+			err = a.setEndpointExit(b.Tag, b.ID)
 		}
 	case r.URL.Path == "/api/tools/tailscale" && r.Method == "GET":
 		result = a.tailscaleStatus()
@@ -348,6 +373,13 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		result = a.toolsInfo()
 	case r.URL.Path == "/api/routing" && r.Method == "GET":
 		result, err = a.routingInfo()
+	case r.URL.Path == "/api/routing" && r.Method == "POST":
+		var b struct {
+			Mode string `json:"mode"`
+		}
+		if err = decode(r, &b); err == nil {
+			err = a.setRoutingMode(b.Mode)
+		}
 	case r.URL.Path == "/api/state" && r.Method == "GET":
 		name := ""
 		for _, p := range a.settings.Profiles {
@@ -363,8 +395,12 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		case "stop":
 			err = a.stop()
 		case "restart":
+			proxy := a.proxy
 			if err = a.stop(); err == nil {
 				err = a.start()
+				if err == nil {
+					err = a.setProxy(proxy)
+				}
 			}
 		default:
 			err = errors.New("未知操作")
@@ -404,6 +440,11 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 			b.Name = "新配置"
 		}
 		p := Profile{ID: id(), Name: b.Name, URL: b.URL, Type: typ, Updated: time.Now(), Enabled: len(a.settings.Profiles) == 0}
+		if typ == "remote" {
+			enabled := true
+			p.AutoUpdate = &enabled
+			p.UpdateMinutes = 60
+		}
 		if err = os.WriteFile(a.profilePath(p.ID), data, 0600); err != nil {
 			break
 		}
@@ -505,8 +546,11 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 			result = map[string]any{"upload": upSpeed, "download": downSpeed, "upload_total": up, "download_total": down, "connections": len(connections)}
 		}
 	case strings.HasPrefix(r.URL.Path, "/api/connections") && r.Method == "DELETE":
-		http.Error(w, "closing connections is not implemented", http.StatusNotImplemented)
-		return
+		suffix := strings.TrimPrefix(r.URL.Path, "/api/connections")
+		if suffix != "" {
+			suffix = "/" + url.PathEscape(strings.TrimPrefix(suffix, "/"))
+		}
+		result, err = a.clashCall("DELETE", "/connections"+suffix)
 	case strings.HasPrefix(r.URL.Path, "/api/connections") && r.Method == "GET":
 		suffix := strings.TrimPrefix(r.URL.Path, "/api/connections")
 		result, err = a.clashCall(r.Method, "/connections"+suffix)

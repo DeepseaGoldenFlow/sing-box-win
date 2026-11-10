@@ -58,7 +58,7 @@ public sealed partial class MainWindow
         if (profilePicker is not null) profilePicker.IsEnabled = session.IsSwitchable;
         foreach (var action in profileActions) action.IsEnabled = connected && S(state, "profile") != "" && !acting;
         if (profileUpdateButton is not null) profileUpdateButton.IsEnabled = profileUpdateButton.IsEnabled && selectedProfileRemote;
-        foreach (var card in dashboardCards) card.Value.Visibility = CardEnabled(card.Key) && (card.Key is "Status" or "Profile" || session.IsConnected) ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var card in dashboardCards) card.Value.Visibility = CardEnabled(card.Key) && (card.Key != "Routing Mode" || multipleRoutingModes) && (card.Key == "Profile" || session.IsConnected) ? Visibility.Visible : Visibility.Collapsed;
     }
     private bool CardEnabled(string key) => key == "Profile" || preferences["cards"]?[key]?.GetValue<bool>() != false;
     private void AddDashboardCard(StackPanel body, string key, UIElement child)
@@ -90,6 +90,7 @@ public sealed partial class MainWindow
         memory = Text("..."); goroutines = Text("..."); box.Children.Add(Row(Text(T("Memory")), memory, Text("Goroutines"), goroutines)); AddDashboardCard(body, "Status", box);
         inbound = Text("..."); outbound = Text("..."); AddDashboardCard(body, "Connections", Row(Text(T("Inbound")), inbound, Text(T("Outbound")), outbound));
         AddDashboardCard(body, "System Proxy", proxyPanel);
+        RenderModeCard(body);
         up = Text("...", 28); uploadTotal = Text("..."); var u = new StackPanel { Spacing = 8 }; u.Children.Add(up); u.Children.Add(uploadTotal); AddDashboardCard(body, "Upload", u);
         down = Text("...", 28); downloadTotal = Text("..."); var d = new StackPanel { Spacing = 8 }; d.Children.Add(down); d.Children.Add(downloadTotal); AddDashboardCard(body, "Download", d);
         chart = new Microsoft.UI.Xaml.Controls.Canvas { Height = 150, HorizontalAlignment = HorizontalAlignment.Stretch }; chart.SizeChanged += (_, _) => DrawChart(); AddDashboardCard(body, "Real-time Speed", chart);
@@ -122,7 +123,7 @@ public sealed partial class MainWindow
     private async Task ManageCards()
     {
         var panel = new StackPanel { Spacing = 12 };
-        foreach (string key in new[] { "Status", "Connections", "Upload", "Download", "Real-time Speed", "System Proxy", "Profile" }) {
+        foreach (string key in new[] { "Status", "Connections", "Upload", "Download", "Real-time Speed", "System Proxy", "Routing Mode", "Profile" }) {
             var toggle = new CheckBox { Content = T(key), IsChecked = CardEnabled(key), IsEnabled = key != "Profile" };
             toggle.Click += async (_, _) => { if (preferences["cards"] is not JsonObject) preferences["cards"] = new JsonObject(); preferences["cards"]![key] = toggle.IsChecked == true; await Run(SavePreferences); UpdateControls(); }; panel.Children.Add(toggle);
         }
@@ -159,6 +160,7 @@ public sealed partial class MainWindow
             if (profiles is not null) foreach (var p in profiles) { var item = new ComboBoxItem { Content = S(p, "name"), Tag = S(p, "id") }; profilePicker.Items.Add(item); if (B(p, "enabled")) profilePicker.SelectedItem = item; }
             pickingProfile = false;
         }
+        await RefreshModeCard();
         UpdateControls();
     }
     private void RenderGroups(StackPanel body)
@@ -169,47 +171,65 @@ public sealed partial class MainWindow
         groupsPanel = new StackPanel { Spacing = 16 }; body.Children.Add(groupsPanel);
     }
     private static string StrategyKey(string type) => type switch { "URLTest" => "StrategyURLTest", "Fallback" => "StrategyFallback", "LoadBalance" => "StrategyLoadBalance", "Relay" => "StrategyRelay", "Selector" => "StrategySelector", _ => "StrategyOther" };
+    private string groupSignature="";
+    private readonly Dictionary<string,TextBlock> groupLatencies=new();
+    private readonly Dictionary<string,TextBlock> groupHeaders=new();
     private async Task RefreshGroups()
     {
-        var groups = await api.Call("groups") as JsonArray;
-        var routing = await api.Call("routing");
-        if (page != "Groups" || groupsPanel is null) return;
-        string mode = S(routing,"mode").ToLowerInvariant();
-        routingSummary!.Text = T(mode switch { "rule" => "Rule Mode", "global" => "Global Mode", "direct" => "Direct Mode", _ => "Unknown Mode" })
-            + $" · {T("Route Rules")}: {N(routing,"rules_count"):0} · {T("Final Outbound")}: {S(routing,"final")}";
-        groupsPanel.Children.Clear(); if (groups is null || groups.Count == 0) { groupsPanel.Children.Add(Text(T("No data"))); return; }
-        foreach (var g in groups) {
-            string tag = S(g, "tag"), type = S(g, "type"), selected = S(g, "selected");
-            bool selector = string.Equals(type, "Selector", StringComparison.OrdinalIgnoreCase);
-            var panel = new StackPanel { Spacing = 8 };
-            var header = new StackPanel { Spacing = 2 };
-            header.Children.Add(Text($"{tag} · {type} · {N(g, "delay"):0} ms{(selected == "" ? "" : " · " + selected)}", 16));
-            header.Children.Add(Text(T(StrategyKey(type)) + (selector ? "" : " · " + T("ReadOnlyGroup")), 12, "#8E8E93"));
-            panel.Children.Add(header);
-            if (g?["members"] is JsonArray members) foreach (var m in members) {
-                string name = S(m, "tag"); double delay = N(m, "delay"); bool isNow = name == selected;
-                var memberRow = new Grid();
-                memberRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                memberRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                var label = Text((isNow ? "✓ " : "") + name); label.HorizontalAlignment = HorizontalAlignment.Left; label.TextWrapping = TextWrapping.NoWrap; label.TextTrimming = TextTrimming.CharacterEllipsis;
-                var latency = Text($"{delay:0} ms"); latency.HorizontalAlignment = HorizontalAlignment.Right; latency.Opacity = .7; latency.Margin = new Thickness(12, 0, 0, 0);
-                Grid.SetColumn(label, 0); Grid.SetColumn(latency, 1); memberRow.Children.Add(label); memberRow.Children.Add(latency);
-                var line = Brush(delay == 0 ? "#8E8E93" : delay < 800 ? "#30D158" : delay <= 1500 ? "#FF9F0A" : "#FF453A");
-                if (selector) {
-                    // Selector: clicking picks the node (PUT /api/groups/{tag}/select).
-                    var button = Button("", async () => { await api.Call("groups/" + Uri.EscapeDataString(tag) + "/select", HttpMethod.Put, new { outbound = name }); });
-                    button.Content = memberRow; button.HorizontalContentAlignment = HorizontalAlignment.Stretch; button.Foreground = line;
-                    if (isNow) { button.BorderThickness = new Thickness(1); button.BorderBrush = Brush("#30D158"); }
-                    button.HorizontalAlignment = HorizontalAlignment.Stretch; Enable(button, Session.IsConnectedStrict && !isNow); panel.Children.Add(button);
-                } else {
-                    // Automatic group (URLTest/Fallback/LoadBalance/Relay): read-only, no request on click.
-                    foreach (var child in memberRow.Children.ToArray()) if (child is TextBlock block) block.Foreground = line;
-                    var row = new Border { Child = memberRow, Padding = new Thickness(10, 8, 10, 8), CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(isNow ? 1 : 0), BorderBrush = Brush("#30D158"), Opacity = Session.IsConnectedStrict ? 1 : .55 };
-                    if (isNow) row.Background = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(0x20, 0x30, 0xD1, 0x58));
-                    panel.Children.Add(row);
+        var groups=await api.Call("groups") as JsonArray??new();
+        var routing=await api.Call("routing");
+        if(page!="Groups"||groupsPanel is null)return;
+        string mode=S(routing,"mode").ToLowerInvariant();
+        routingSummary!.Text=T(mode switch{"rule"=>"Rule Mode","global"=>"Global Mode","direct"=>"Direct Mode",_=>"Unknown Mode"})
+            +$" · {T("Route Rules")}: {N(routing,"rules_count"):0} · {T("Final Outbound")}: {S(routing,"final")}";
+        int columns=Math.Max(1,(int)((groupsPanel.ActualWidth>0?groupsPanel.ActualWidth:720)/220));
+        string signature=columns+"|"+string.Join("|",groups.Select(g=>S(g,"tag")+S(g,"selected")+S(g,"type")+string.Join(",",(g?["members"] as JsonArray??new()).Select(m=>S(m,"tag")+S(m,"type")))));
+        if(signature!=groupSignature||groupsPanel.Children.Count==0){
+            groupSignature=signature;groupsPanel.Children.Clear();groupLatencies.Clear();groupHeaders.Clear();
+            if(groups.Count==0){groupsPanel.Children.Add(Text(T("No data")));return;}
+            foreach(var g in groups){
+                string tag=S(g,"tag"),type=S(g,"type"),selected=S(g,"selected");
+                bool selector=string.Equals(type,"Selector",StringComparison.OrdinalIgnoreCase);
+                var header=Text("",15);groupHeaders[tag]=header;
+                var nodes=new Grid();
+                for(int col=0;col<columns;col++)nodes.ColumnDefinitions.Add(new ColumnDefinition());
+                var members=g?["members"] as JsonArray??new();
+                for(int i=0;i<members.Count;i++){
+                    var m=members[i];string name=S(m,"tag");bool chosen=name==selected;
+                    if(i%columns==0)nodes.RowDefinitions.Add(new RowDefinition {Height=GridLength.Auto});
+                    var contents=new StackPanel {Spacing=5};
+                    var title=Text((chosen?"✓ ":"")+name);title.MaxLines=2;contents.Children.Add(title);
+                    var latency=Text("",12);groupLatencies[tag+"\0"+name]=latency;
+                    contents.Children.Add(Row(Text(S(m,"type"),11,"#9A9AA0"),latency));
+                    FrameworkElement tile;
+                    if(selector){
+                        var button=Button("",async()=>{await api.Call("groups/"+Uri.EscapeDataString(tag)+"/select",HttpMethod.Put,new{outbound=name});});
+                        button.Content=contents;button.HorizontalContentAlignment=HorizontalAlignment.Stretch;Enable(button,!chosen);
+                        if(chosen){button.BorderBrush=Brush("#0A84FF");button.BorderThickness=new Thickness(1);}
+                        tile=button;
+                    }else tile=new Border {Child=contents,Padding=new Thickness(12),CornerRadius=new CornerRadius(8),BorderThickness=new Thickness(chosen?1:0),BorderBrush=Brush("#0A84FF")};
+                    var menu=new MenuFlyout();var test=new MenuFlyoutItem {Text=T("Test Node")};
+                    test.Click+=async(_,_)=>await Run(async()=>{await api.Call("node/delay",HttpMethod.Post,new{tag=name});});
+                    menu.Items.Add(test);tile.ContextFlyout=menu;
+                    tile.HorizontalAlignment=HorizontalAlignment.Stretch;tile.Margin=new Thickness(4);Grid.SetRow(tile,i/columns);Grid.SetColumn(tile,i%columns);nodes.Children.Add(tile);
                 }
+                bool expanded=preferences["groups_collapsed"]?[tag]?.GetValue<bool>()!=true;
+                var expander=new Expander {Header=header,Content=nodes,IsExpanded=expanded,HorizontalAlignment=HorizontalAlignment.Stretch,HorizontalContentAlignment=HorizontalAlignment.Stretch};
+                async Task Remember(bool collapsed){if(preferences["groups_collapsed"] is not JsonObject)preferences["groups_collapsed"]=new JsonObject();preferences["groups_collapsed"]![tag]=collapsed;await Run(SavePreferences);}
+                expander.Expanding+=async(_,_)=>await Remember(false);expander.Collapsed+=async(_,_)=>await Remember(true);
+                var panel=new StackPanel {Spacing=8};
+                panel.Children.Add(Row(Button(T("Test Group"),async()=>{await api.Call("groups/"+Uri.EscapeDataString(tag)+"/urltest",HttpMethod.Post);}),Text(T(StrategyKey(type))+(selector?"":" · "+T("ReadOnlyGroup")),12,"#9A9AA0")));
+                panel.Children.Add(expander);groupsPanel.Children.Add(Card(panel));
             }
-            groupsPanel.Children.Add(Card(panel));
+        }
+        foreach(var g in groups){
+            string tag=S(g,"tag");
+            if(groupHeaders.TryGetValue(tag,out var header))header.Text=tag+" · "+S(g,"type")+" · "+(g?["members"] as JsonArray)?.Count+" · "+S(g,"selected");
+            foreach(var m in g?["members"] as JsonArray??new()){
+                if(!groupLatencies.TryGetValue(tag+"\0"+S(m,"tag"),out var latency))continue;
+                double delay=N(m,"delay");latency.Text=delay<=0?"—":$"{delay:0} ms";
+                latency.Foreground=Brush(delay<=0?"#9A9AA0":delay<800?"#30D158":delay<1500?"#FF9F0A":"#FF453A");
+            }
         }
     }
     private ComboBox Choices(string header, string[] items, int index, Action<int> changed)
@@ -259,7 +279,7 @@ public sealed partial class MainWindow
                 "network" => S(m, "network"), "inbound" => S(m, "inboundName"), "inbound.type" => S(m, "type"),
                 "source" => S(m, "sourceIP") + ":" + S(m, "sourcePort"),
                 "destination" => S(m, "destinationIP") + ":" + S(m, "destinationPort") + " " + S(m, "host"),
-                "" => S(m, "destinationIP") + " " + S(m, "host"), _ => ""
+                "" => c.ToJsonString(), _ => ""
             };
             if (!haystack.Contains(value, StringComparison.OrdinalIgnoreCase)) return false;
         }
@@ -276,7 +296,11 @@ public sealed partial class MainWindow
             string destination = S(m, "host"); if (destination == "") destination = S(m, "destinationIP");
             var end = B(c, "closed") && DateTimeOffset.TryParse(S(c, "end"), out var closed) ? closed : DateTimeOffset.UtcNow;
             double duration = DateTimeOffset.TryParse(S(c, "start"), out var since) ? Math.Max(0, (end - since).TotalSeconds) : 0;
-            list.Items.Add(ConnectionRow([chain, S(m, "network"), $"{S(m, "sourceIP")}:{S(m, "sourcePort")} → {destination}:{S(m, "destinationPort")}", S(c, "rule") + " " + S(c, "rulePayload"), $"↑{Bytes(N(c, "upload"))} ↓{Bytes(N(c, "download"))}\n{Bytes(N(c, "speed"))}/s", $"{duration:0}s\n{T(B(c, "closed") ? "Closed" : "Active")}"]));
+            var line = ConnectionRow([chain, S(m, "network"), $"{S(m, "sourceIP")}:{S(m, "sourcePort")} → {destination}:{S(m, "destinationPort")}", S(c, "rule") + " " + S(c, "rulePayload"), $"↑{Bytes(N(c, "upload"))} ↓{Bytes(N(c, "download"))}\n{Bytes(N(c, "speed"))}/s", $"{duration:0}s\n{T(B(c, "closed") ? "Closed" : "Active")}"]);
+            var snapshot=(JsonObject)c.DeepClone();
+            var button=Button("",()=>ShowConnectionDetails(snapshot));
+            button.Content=line;button.HorizontalAlignment=HorizontalAlignment.Stretch;button.HorizontalContentAlignment=HorizontalAlignment.Stretch;
+            list.Items.Add(button);
         }
         if (closeAllButton is not null) closeAllButton.IsEnabled = connectionHistory.Values.Any(c => !B(c, "closed"));
         if (list.Items.Count == 0) {
@@ -294,7 +318,7 @@ public sealed partial class MainWindow
         var levels = new ComboBox { Header = T("Log Level"), ItemsSource = new[] { T("Default"), "Error", "Warn", "Info", "Debug", "Trace" }, SelectedIndex = Array.IndexOf(new[] { "", "error", "warn", "info", "debug", "trace" }, level), MinWidth = 110 };
         levels.SelectionChanged += (_, _) => { level = new[] { "", "error", "warn", "info", "debug", "trace" }[levels.SelectedIndex]; ShowLogs(); };
         Button? pause = null; pause = Button(T(logsPaused ? "Resume" : "Pause"), () => { logsPaused = !logsPaused; pause!.Content = T(logsPaused ? "Resume" : "Pause"); return Task.CompletedTask; });
-        body.Children.Add(Row(levels, pause, Button(T("To Clipboard"), () => { var data = new DataPackage(); data.SetText(visibleLogText); Clipboard.SetContent(data); return Task.CompletedTask; }), Button(T("To File"), ExportLogs), Button(T("Clear Logs"), async () => { await api.Call("logs", HttpMethod.Delete); logSnapshot = new(); logCursor = ""; logsPaused = false; ShowLogs(); })));
+        body.Children.Add(Row(levels, pause, Button(T("To Clipboard"), () => { var data = new DataPackage(); data.SetText(visibleLogText); Clipboard.SetContent(data); return Task.CompletedTask; }), Button(T("To File"), ExportLogs), Button(T("Clear Logs"), async () => { await api.Call("logs", HttpMethod.Delete); logSnapshot = new(); logCursor = ""; logsPaused = false; Render(); })));
         body.Children.Add(search); list = new ListView { SelectionMode = ListViewSelectionMode.None, Height = 340 }; body.Children.Add(list); ShowLogs();
     }
     private static int LogRank(string value) => value.ToLowerInvariant() switch { "panic" or "fatal" => 0, "error" => 1, "warn" => 2, "info" => 3, "debug" => 4, "trace" => 5, _ => 3 };

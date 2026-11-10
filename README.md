@@ -101,3 +101,11 @@ Checks require the build tags from the Makefile, including `with_gvisor`.
 ### v0.5.2 组与路由状态
 
 组列表按当前配置的 outbounds 顺序显示真实策略组，不再把 Clash API 合成的 GLOBAL/Fallback 当成订阅里的组。配置明确命名为 GLOBAL 的真实组仍正常显示。组页顶部从运行中的内核读取实际模式，并显示规则数及默认出口。Selector 可手动选择，URLTest 自动选择。此版本不改写订阅路由规则。
+
+### SFW 目标与 v0.6.0 整体审查
+
+产品目标是 SFW（sing-box for Windows），在行为上对齐 SFM，而不是仅提供一个能启动内核的界面。当前并未完全对齐，尤其 **TUN 尚未实现**。
+
+本轮补齐连接关闭与详情、日志清空、配置切换失败恢复、代理偏好保持、真实核心模式保留、按配置 mode-list 的模式控制、JSON 文件/粘贴导入、策略组网格/折叠/分组与单节点测速、Tailscale 实时状态与设备/退出节点控制，并接入真实出站计数。
+
+详细差异、优先级和验证边界见 [SFW 对齐 SFM 整体审查](docs/sfw-sfm-parity-audit.md)。

@@ -106,7 +106,8 @@ func (a *App) importLink(link string) error {
 	if name == "" {
 		name = "Imported subscription"
 	}
-	p := Profile{ID: id(), Name: name, URL: source, Type: "remote", Updated: time.Now(), Enabled: len(a.settings.Profiles) == 0}
+	auto := true
+	p := Profile{AutoUpdate: &auto, UpdateMinutes: 60, ID: id(), Name: name, URL: source, Type: "remote", Updated: time.Now(), Enabled: len(a.settings.Profiles) == 0}
 	if e = os.WriteFile(a.profilePath(p.ID), data, 0600); e != nil {
 		return e
 	}

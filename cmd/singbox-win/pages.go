@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	blog "github.com/sagernet/sing-box/log"
+	"github.com/sagernet/sing/common/memory"
 	"net/http"
 	"net/url"
 	"os"
@@ -186,6 +187,28 @@ func (a *App) pageAPI(w http.ResponseWriter, r *http.Request) bool {
 		} else {
 			reply(w, map[string]bool{"ok": true})
 		}
+	case strings.HasSuffix(path, "/urltest") && r.Method == "POST":
+		tag := strings.TrimSuffix(strings.TrimPrefix(path, "/api/groups/"), "/urltest")
+		groups, e := a.groups()
+		found := false
+		for _, g := range groups {
+			if g.Tag == tag {
+				found = true
+				break
+			}
+		}
+		if e != nil {
+			a.unavailable(w, e)
+		} else if !found {
+			http.Error(w, "group not found", 404)
+		} else {
+			result, e := a.clashCall("GET", "/group/"+url.PathEscape(tag)+"/delay?timeout=5000&url="+url.QueryEscape("https://www.gstatic.com/generate_204"))
+			if e != nil {
+				a.unavailable(w, e)
+			} else {
+				reply(w, result)
+			}
+		}
 	case strings.HasSuffix(path, "/select") && r.Method == "PUT":
 		tag := strings.TrimSuffix(strings.TrimPrefix(path, "/api/groups/"), "/select")
 		var b struct {
@@ -232,27 +255,22 @@ func (a *App) pageAPI(w http.ResponseWriter, r *http.Request) bool {
 			reply(w, map[string]bool{"ok": true})
 		}
 	case path == "/api/native/status" && r.Method == "GET":
-		var m runtime.MemStats
-		runtime.ReadMemStats(&m)
 		exe, _ := os.Executable()
 		inCount, outCount := 0, 0
 		if a.core != nil {
+			if a.connectionManager != nil {
+				outCount = a.connectionManager.Count()
+			}
 			if result, e := a.clashCall("GET", "/connections"); e == nil {
 				if root, ok := result.(map[string]any); ok {
 					if connections, ok := root["connections"].([]any); ok {
 						inCount = len(connections)
-						for _, c := range connections {
-							if item, ok := c.(map[string]any); ok {
-								if chain, ok := item["chains"].([]any); ok {
-									outCount += len(chain)
-								}
-							}
-						}
 					}
 				}
 			}
 		}
-		reply(w, map[string]any{"memory": m.Alloc, "goroutines": runtime.NumGoroutine(), "core_path": exe, "connections_in": inCount, "connections_out": outCount, "tun_available": false})
+		reply(w, map[string]any{"memory": memory.Total(), "goroutines": runtime.NumGoroutine(), "core_path": exe, "connections_in": inCount, "connections_out": outCount, "tun_available": false, "counter_source": "traffic-connections/core-connection-manager"})
+
 	case path == "/api/native/core" && r.Method == "GET":
 		reply(w, a.nativeOptions())
 	case path == "/api/native/core" && r.Method == "PUT":
@@ -271,11 +289,16 @@ func (a *App) pageAPI(w http.ResponseWriter, r *http.Request) bool {
 			break
 		}
 		if a.core != nil {
+			proxy := a.proxy
 			if e := a.stop(); e != nil {
 				http.Error(w, e.Error(), 500)
 				break
 			}
 			if e := a.start(); e != nil {
+				http.Error(w, e.Error(), 500)
+				break
+			}
+			if e := a.setProxy(proxy); e != nil {
 				http.Error(w, e.Error(), 500)
 				break
 			}
@@ -299,24 +322,7 @@ func (a *App) pageAPI(w http.ResponseWriter, r *http.Request) bool {
 			http.Error(w, "profile not found", 404)
 			break
 		}
-		running := a.core != nil
-		proxy := a.proxy
-		if running {
-			if e := a.stop(); e != nil {
-				http.Error(w, e.Error(), 500)
-				break
-			}
-		}
-		for i := range a.settings.Profiles {
-			a.settings.Profiles[i].Enabled = i == idx
-		}
-		e := a.save()
-		if e == nil && running {
-			e = a.start()
-			if e == nil && proxy {
-				e = a.setProxy(true)
-			}
-		}
+		e := a.switchProfile(idx)
 		if e != nil {
 			http.Error(w, e.Error(), 500)
 		} else {

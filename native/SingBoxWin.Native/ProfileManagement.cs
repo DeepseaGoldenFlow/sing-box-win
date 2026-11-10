@@ -26,7 +26,7 @@ public sealed partial class MainWindow
         var p = detail?["profile"];
         var settings = await api.Call("settings");
         var name = new TextBox { Header = T("Name"), Text = S(p, "name") };
-        var url = new TextBox { Header = T("URL"), Text = S(p, "url"), PlaceholderText = "https://" };
+        var url = new TextBox { Header = T("URL"), Text = S(p, "url"), PlaceholderText = "https://", IsEnabled = S(p,"type")=="remote" };
         var auto = new ToggleSwitch { Header = T("Profile Auto Update"), IsOn = p?["auto_update"] is null ? N(settings, "update_hours") > 0 : B(p, "auto_update") };
         double interval = N(p, "update_minutes"); if (interval <= 0) interval = Math.Max(60, N(settings, "update_hours") * 60);
         var minutes = new NumberBox { Header = T("Update Minutes"), Value = interval, Minimum = 1, Maximum = 525600, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };

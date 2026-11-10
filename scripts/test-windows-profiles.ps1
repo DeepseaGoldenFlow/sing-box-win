@@ -9,6 +9,7 @@ try {
         $listener=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
         $listener.Start()
         $listener.LocalEndpoint.Port
+        for($request=0;$request -lt 2;$request++) {
         $client=$listener.AcceptTcpClient()
         try {
             $stream=$client.GetStream()
@@ -18,7 +19,9 @@ try {
             $bytes=[Text.Encoding]::UTF8.GetBytes($body)
             $header=[Text.Encoding]::ASCII.GetBytes("HTTP/1.1 200 OK`r`nContent-Type: application/json`r`nContent-Length: "+$bytes.Length+"`r`nConnection: close`r`n`r`n")
             $stream.Write($header,0,$header.Length);$stream.Write($bytes,0,$bytes.Length)
-        } finally { $client.Close();$listener.Stop() }
+        } finally { $client.Close() }
+        }
+        $listener.Stop()
     }
     for($i=0;$i -lt 50;$i++) {
         $port=Receive-Job $job -Keep|Select-Object -First 1
@@ -26,7 +29,7 @@ try {
         Start-Sleep -Milliseconds 100
     }
     if(!$port) {throw 'Mock subscription server did not start'}
-    $p=Invoke-RestMethod ($r.url+'/api/profiles/import') -Method Post -ContentType application/json -Body '{"name":"__profile_management_test__","content":"{}"}'
+    $p=Invoke-RestMethod ($r.url+'/api/profiles/import') -Method Post -ContentType application/json -Body (@{name='__profile_management_test__';url="http://127.0.0.1:$port/config.json"}|ConvertTo-Json)
     $id=$p.id
     $path=$r.url+'/api/profiles/'+$id
     Invoke-RestMethod $path -Method Put -ContentType application/json -Body (@{name='__profile_management_edited__';url="http://127.0.0.1:$port/config.json";auto_update=$true;update_minutes=5}|ConvertTo-Json) | Out-Null

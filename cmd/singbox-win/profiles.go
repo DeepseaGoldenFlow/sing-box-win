@@ -115,11 +115,13 @@ func (a *App) editProfile(idx int, b profileEdit) error {
 		if value != "" && !validProfileURL(value) {
 			return errors.New("订阅 URL 必须是有效的 HTTP/HTTPS 地址")
 		}
-		candidate.URL = value
-		candidate.Type = "local"
-		if value != "" {
-			candidate.Type = "remote"
+		if p.Type == "remote" && value == "" {
+			return errors.New("远程配置 URL 不能为空")
 		}
+		if p.Type == "local" && value != "" {
+			return errors.New("配置类型不可通过编辑更改，请重新导入远程配置")
+		}
+		candidate.URL = value
 	}
 	if b.AutoUpdate != nil {
 		candidate.AutoUpdate = b.AutoUpdate
@@ -186,4 +188,45 @@ func (a *App) deleteProfile(idx int) error {
 		return err
 	}
 	return nil
+}
+
+// Switching profiles is transactional: a bad replacement must not strand a working session.
+func (a *App) switchProfile(idx int) error {
+	if idx < 0 || idx >= len(a.settings.Profiles) {
+		return errors.New("profile not found")
+	}
+	if a.settings.Profiles[idx].Enabled {
+		return nil
+	}
+	previous := append([]Profile(nil), a.settings.Profiles...)
+	running, proxy := a.core != nil, a.proxy
+	if running {
+		if err := a.stop(); err != nil {
+			return err
+		}
+	}
+	for i := range a.settings.Profiles {
+		a.settings.Profiles[i].Enabled = i == idx
+	}
+	err := a.save()
+	if err == nil && running {
+		err = a.start()
+		if err == nil {
+			err = a.setProxy(proxy)
+		}
+	}
+	if err == nil {
+		return nil
+	}
+	_ = a.stop()
+	a.settings.Profiles = previous
+	saveErr := a.save()
+	var restoreErr error
+	if running {
+		restoreErr = a.start()
+		if restoreErr == nil {
+			restoreErr = a.setProxy(proxy)
+		}
+	}
+	return errors.Join(err, saveErr, restoreErr)
 }
