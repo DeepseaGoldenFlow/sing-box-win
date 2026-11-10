@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- SingBoxWin mark: deep-navy squircle + white paper plane (20 deg). Master art for app.ico -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0A2249"/>
+      <stop offset="1" stop-color="#14488C"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="55" fill="url(#bg)"/>
+  <g transform="rotate(20 128 128)">
+    <path d="M51.20,60.57 L204.80,128.00 L51.20,195.43 L51.20,136.24 L153.10,128.00 L51.20,119.76 Z" fill="#fff"/>
+  </g>
+</svg>

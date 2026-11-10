@@ -49,12 +49,6 @@ func (a *App) restoreProxy() error {
 	}
 	return nil
 }
-func (a *App) runtimeURL() string {
-	var r struct{ URL string }
-	b, _ := os.ReadFile(filepath.Join(a.dir, "runtime.json"))
-	json.Unmarshal(b, &r)
-	return r.URL
-}
 func activateExisting(dir string) error {
 	var last error
 	for i := 0; i < 600; i++ {
@@ -74,7 +68,7 @@ func activateExisting(dir string) error {
 					link = v
 				}
 			}
-			body, _ := json.Marshal(map[string]any{"link": link, "headless": headlessRequested()})
+			body, _ := json.Marshal(map[string]string{"link": link})
 			c := http.Client{Timeout: 60 * time.Second}
 			resp, err := c.Post(r.URL+"/api/activate", "application/json", bytes.NewReader(body))
 			if err == nil {

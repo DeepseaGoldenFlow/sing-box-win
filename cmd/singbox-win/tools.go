@@ -13,15 +13,6 @@ import (
 	"time"
 )
 
-func headlessRequested() bool {
-	for _, arg := range os.Args[1:] {
-		if arg == "--headless" || arg == "--no-ui" || arg == "-headless" || arg == "-no-ui" || arg == "--headless=true" || arg == "--no-ui=true" {
-			return true
-		}
-	}
-	return false
-}
-
 type tailscaleState struct {
 	Enabled        bool     `json:"enabled"`
 	Registered     bool     `json:"registered"`
@@ -152,9 +143,5 @@ func (a *App) toolsInfo() any {
 			}
 		}
 	}
-	mode := "ui"
-	if a.headless {
-		mode = "headless"
-	}
-	return map[string]any{"version": version, "core_version": coreVersion, "mode": mode, "data_dir": a.dir, "log_path": filepath.Join(a.dir, "engine.log")}
+	return map[string]any{"version": version, "core_version": coreVersion, "mode": "headless", "data_dir": a.dir, "log_path": filepath.Join(a.dir, "engine.log")}
 }

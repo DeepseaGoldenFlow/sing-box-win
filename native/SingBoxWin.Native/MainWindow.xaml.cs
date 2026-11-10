@@ -29,16 +29,18 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Title = "sing-box · Windows";
+        Title = "sing-box for Windows";
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true; SetTitleBar(TitleBar);
         AppWindow.Resize(new SizeInt32(1040, 720));
+        var iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico");
+        if (System.IO.File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
         Root.ActualThemeChanged += (_, _) => ApplyTitleTheme();
         ApplyTitleTheme();
         AppWindow.Changed += (_, args) => {
             if (args.DidSizeChange && AppWindow.Presenter is OverlappedPresenter op && op.State != OverlappedPresenterState.Minimized) {
                 var size = AppWindow.Size;
-                if (size.Width < 900 || size.Height < 620) AppWindow.Resize(new SizeInt32(Math.Max(900, size.Width), Math.Max(620, size.Height)));
+                if (size.Width < 800 || size.Height < 500) AppWindow.Resize(new SizeInt32(Math.Max(800, size.Width), Math.Max(500, size.Height)));
             }
         };
         AppWindow.Closing += (sender, args) => {
@@ -54,6 +56,7 @@ public sealed partial class MainWindow : Window
             }
         };
         try { closeExits = JsonNode.Parse(System.IO.File.ReadAllText(prefsPath))?["close_exits"]?.GetValue<bool>() ?? false; } catch { }
+        LoadPreferences();
         LoadLanguage("zh-CN");
         Nav.SelectionChanged += (_, _) => { if (!rendering && Nav.SelectedItem is NavigationViewItem item) { page = (string)item.Tag; Render(); _ = Refresh(); } };
         timer.Tick += async (_, _) => await Refresh();
@@ -66,7 +69,7 @@ public sealed partial class MainWindow : Window
             await api.ConnectAsync(); connected = true;
             var settings = await api.Call("settings");
             LoadLanguage(S(settings, "language").StartsWith("en") ? "en-US" : "zh-CN");
-            Root.RequestedTheme = S(settings, "theme") == "light" ? ElementTheme.Light : ElementTheme.Dark;
+            Root.RequestedTheme = S(settings, "theme") switch { "light" => ElementTheme.Light, "system" => ElementTheme.Default, _ => ElementTheme.Dark };
             Render(); timer.Start(); await Refresh();
         });
         if (!connected) { var retry = Button(T("Retry"), async () => { await api.ConnectAsync(); connected = true; Render(); timer.Start(); await Refresh(); }); Body().Children.Add(retry); }
@@ -78,13 +81,13 @@ public sealed partial class MainWindow : Window
         strings = new ResourceDictionary { Source = new Uri($"ms-appx:///Strings/{value}.xaml") };
         rendering = true;
         Nav.MenuItems.Clear();
-        string[] keys = ["Dashboard", "Profiles", "Connections", "Logs", "Tools", "Settings"];
+        string[] keys = ["Dashboard", "Groups", "Connections", "Logs", "Tools", "Settings"];
         string[] glyphs = ["\uE80F", "\uE8A5", "\uE8CE", "\uE9D9", "\uE90F", "\uE713"];
         for (int i = 0; i < keys.Length; i++) {
             var item = new NavigationViewItem { Content = T(keys[i]), Tag = keys[i], FontSize = 13, MinHeight = 36, Icon = new FontIcon { Glyph = glyphs[i], FontSize = 16, FontFamily = new FontFamily("Segoe Fluent Icons") } };
             Nav.MenuItems.Add(item); if (keys[i] == page) Nav.SelectedItem = item;
         }
-        rendering = false; Render();
+        rendering = false; UpdateControls(); Render();
     }
     private static string S(JsonNode? n, string key) => n?[key]?.ToString() ?? "";
     private static bool B(JsonNode? n, string key) => n?[key]?.GetValue<bool>() ?? false;
@@ -120,7 +123,7 @@ public sealed partial class MainWindow : Window
         var button = new Button { Content = title };
         if (primary) button.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
         button.Resources["AccentButtonBackgroundDisabled"] = Brush(Root.ActualTheme == ElementTheme.Light ? "#E5E5EA" : "#3A3A3C");
-        button.Click += async (_, _) => { if (acting) return; acting = true; Enable(button, false); await Run(action); acting = false; Enable(button, true); await Refresh(); };
+        button.Click += async (_, _) => { if (acting) return; acting = true; Enable(button, false); await Run(action); acting = false; Enable(button, true); UpdateControls(); await Refresh(); };
         return button;
     }
     private async Task Run(Func<Task> action)
@@ -141,38 +144,17 @@ public sealed partial class MainWindow : Window
     {
         if (rendering) return;
         ContentFrame.Content = null; Heading.Text = T(page);
+        Toolbar.Children.Clear();
+        if (page == "Dashboard") Toolbar.Children.Add(Button(T("Edit Dashboard"), ManageCards));
+        toolbarStart = Button(T("Start"), () => Core(Session.IsConnected ? "stop" : "start"), true); Toolbar.Children.Add(toolbarStart); UpdateControls();
         status = profile = up = down = totals = tailStatus = host = ips = expiry = sync = testResult = tailHint = null;
         profileList = null; list = null; chart = null;
         var body = Body();
         switch (page) {
-            case "Dashboard":
-                status = Text(T("Stopped"), 28, "#8E8E93"); status.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-                profile = Text(T("NoProfile"), 13, "#8E8E93");
-                start = Button(T("Start"), () => Core("start"), true); stop = Button(T("Stop"), () => Core("stop")); restart = Button(T("Restart"), () => Core("restart"));
-                Enable(start, false); Enable(stop, false); Enable(restart, false);
-                stop.Background = Brush(Root.ActualTheme == ElementTheme.Light ? "#E5E5EA" : "#3A3A3C");
-                var stateBox = new StackPanel { Spacing = 12 }; stateBox.Children.Add(status); stateBox.Children.Add(profile); stateBox.Children.Add(Row(start, stop, restart)); body.Children.Add(Card(stateBox));
-                up = Text("0 B/s", 28, "#FF9F0A"); down = Text("0 B/s", 28, "#30D158"); Mono(up); Mono(down); up.FontWeight = down.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-                var metrics = new Grid { ColumnSpacing = 16 }; metrics.ColumnDefinitions.Add(new ColumnDefinition()); metrics.ColumnDefinitions.Add(new ColumnDefinition());
-                var u = new StackPanel { Spacing = 12 }; u.Children.Add(Text("↑ " + T("Upload"), 13, "#9A9AA0")); u.Children.Add(up);
-                var d = new StackPanel { Spacing = 12 }; d.Children.Add(Text("↓ " + T("Download"), 13, "#9A9AA0")); d.Children.Add(down);
-                metrics.Children.Add(Card(u)); var dc = Card(d); Grid.SetColumn(dc, 1); metrics.Children.Add(dc); body.Children.Add(metrics);
-                var plot = new StackPanel { Spacing = 16 }; var legend = Row(Text(T("Traffic")), Text("— " + T("Upload"), 12, "#FF9F0A"), Text("— " + T("Download"), 12, "#30D158")); legend.HorizontalAlignment = HorizontalAlignment.Right; plot.Children.Add(legend);
-                chart = new Canvas { Height = 150, HorizontalAlignment = HorizontalAlignment.Stretch }; chart.SizeChanged += (_, _) => DrawChart(); plot.Children.Add(chart); body.Children.Add(Card(plot));
-                totals = Text("—", 12, "#8E8E93"); Mono(totals); body.Children.Add(totals); break;
-            case "Profiles":
-                body.Children.Add(Button(T("Import"), Import, true)); profileList = new StackPanel { Spacing = 16 }; body.Children.Add(profileList); break;
-            case "Connections":
-                body.Children.Add(Text(T("BasicPage"), 12, "#8E8E93"));
-                body.Children.Add(Button(T("CloseAll"), async () => { await api.Call("connections", HttpMethod.Delete); }));
-                body.Children.Add(Text(T("ConnectionColumns"), 12, "#8E8E93")); list = new ListView { FontSize = 13, SelectionMode = ListViewSelectionMode.None, MinHeight = 150 }; body.Children.Add(list); break;
-            case "Logs":
-                body.Children.Add(Text(T("BasicPage"), 12, "#8E8E93"));
-                var levels = new ComboBox { ItemsSource = new[] { T("AllLevels"), "trace", "debug", "info", "warn", "error", "fatal", "panic" }, SelectedIndex = 0, MinWidth = 150 };
-                if (level != "") levels.SelectedItem = level;
-                levels.SelectionChanged += (_, _) => { level = levels.SelectedIndex == 0 ? "" : levels.SelectedItem?.ToString() ?? ""; _ = Refresh(); };
-                var follow = new ToggleSwitch { Header = T("AutoScroll"), IsOn = autoScroll }; follow.Toggled += (_, _) => autoScroll = follow.IsOn;
-                body.Children.Add(Row(levels, follow)); list = new ListView { FontSize = 13, SelectionMode = ListViewSelectionMode.None, Height = 380 }; body.Children.Add(list); break;
+            case "Dashboard": RenderDashboard(body); break;
+            case "Groups": RenderGroups(body); break;
+            case "Connections": RenderConnections(body); break;
+            case "Logs": RenderLogs(body); break;
             case "Tools":
                 var tail = new StackPanel { Spacing = 16 }; tail.Children.Add(Text("Tailscale", 13, "#9A9AA0")); tailStatus = Text(T("Disabled"), 18, "#8E8E93"); tail.Children.Add(tailStatus); tailHint = Text(T("NoTail"), 13, "#9A9AA0"); tail.Children.Add(tailHint);
                 host = Text("—"); ips = Text("—"); expiry = Text("—"); sync = Text("—");
@@ -182,7 +164,12 @@ public sealed partial class MainWindow : Window
             case "Settings": _ = Run(RenderSettings); break;
         }
     }
-    private async Task Core(string action) { await api.Call("core/" + action, HttpMethod.Post); }
+    private async Task Core(string action) {
+        transition = action == "stop" ? ConnectionPhase.Disconnecting : action == "restart" ? ConnectionPhase.Reasserting : ConnectionPhase.Connecting;
+        UpdateControls();
+        try { await api.Call("core/" + action, HttpMethod.Post); }
+        finally { transition = null; state = await api.Call("state"); UpdateControls(); Render(); }
+    }
     private async Task Import()
     {
         var fields = new StackPanel { Spacing = 12 }; var name = new TextBox { Header = T("Name") }; var url = new TextBox { Header = T("URL"), PlaceholderText = "https://" }; fields.Children.Add(name); fields.Children.Add(url);
@@ -200,28 +187,6 @@ public sealed partial class MainWindow : Window
         testResult.Text = $"HTTP {N(result, "status"):0} · {N(result, "ms"):0} ms" + (B(result, "ok") ? "" : " · " + S(result, "error"));
         testResult.Foreground = Brush(B(result, "ok") ? "#30D158" : "#FF453A");
     }
-    private async Task RenderSettings()
-    {
-        if (!connected) return;
-        var settings = await api.Call("settings"); if (page != "Settings") return;
-        var body = Body(); body.Children.Clear(); var panel = new StackPanel { Spacing = 16 };
-        var autoStart = new ToggleSwitch { Header = T("AutoStart"), IsOn = B(settings, "auto_start") };
-        var autoConnect = new ToggleSwitch { Header = T("AutoConnect"), IsOn = B(settings, "auto_connect") };
-        var proxy = new ToggleSwitch { Header = T("Proxy"), IsOn = B(state, "system_proxy") };
-        proxy.Toggled += async (_, _) => await Run(async () => { await api.Call("proxy", HttpMethod.Post, new { enabled = proxy.IsOn }); });
-        var port = new NumberBox { Header = T("Port"), Minimum = 1, Maximum = 65535, Value = N(settings, "port"), SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };
-        var lang = new ComboBox { Header = T("Language"), ItemsSource = new[] { "中文", "English" }, SelectedIndex = language == "en-US" ? 1 : 0 };
-        var theme = new ComboBox { Header = T("Theme"), ItemsSource = new[] { T("Dark"), T("Light") }, SelectedIndex = Root.RequestedTheme == ElementTheme.Light ? 1 : 0 };
-        async Task Save() { await api.Call("settings", HttpMethod.Post, new { auto_start = autoStart.IsOn, auto_connect = autoConnect.IsOn, port = (int)port.Value, language = lang.SelectedIndex == 1 ? "en-US" : "zh-CN", theme = theme.SelectedIndex == 1 ? "light" : "dark" }); }
-        autoStart.Toggled += async (_, _) => await Run(Save); autoConnect.Toggled += async (_, _) => await Run(Save);
-        lang.SelectionChanged += async (_, _) => await Run(async () => { await Save(); LoadLanguage(lang.SelectedIndex == 1 ? "en-US" : "zh-CN"); });
-        theme.SelectionChanged += async (_, _) => await Run(async () => { await Save(); Root.RequestedTheme = theme.SelectedIndex == 1 ? ElementTheme.Light : ElementTheme.Dark; Render(); });
-        var close = new ToggleSwitch { Header = T("CloseExits"), IsOn = closeExits };
-        close.Toggled += async (_, _) => await Run(async () => { closeExits = close.IsOn; System.IO.Directory.CreateDirectory(EngineClient.DataDir); await System.IO.File.WriteAllTextAsync(prefsPath, new JsonObject { ["close_exits"] = closeExits }.ToJsonString()); });
-        foreach (var element in new UIElement[] { autoStart, autoConnect, proxy, port, Button(T("SavePort"), async () => { if (double.IsNaN(port.Value) || port.Value != Math.Truncate(port.Value) || port.Value < 1 || port.Value > 65535) throw new InvalidOperationException(T("InvalidPort")); await Save(); }), lang, theme, close }) panel.Children.Add(element);
-        body.Children.Add(Card(panel)); body.Children.Add(Text(T("BackgroundHint"), 12, "#8E8E93"));
-        body.Children.Add(Row(Button(T("OpenData"), () => { Process.Start(new ProcessStartInfo("explorer.exe", EngineClient.DataDir) { UseShellExecute = true }); return Task.CompletedTask; }), Button(T("Quit"), Quit)));
-    }
     private async Task Quit() { if (connected) await api.Call("quit", HttpMethod.Post); exiting = true; Application.Current.Exit(); }
     private async Task Refresh()
     {
@@ -230,50 +195,19 @@ public sealed partial class MainWindow : Window
         string requestedPage = page;
         try {
             state = await api.Call("state");
+            UpdateControls();
             if (page != requestedPage) return;
             switch (requestedPage) {
-                case "Dashboard":
-                    if (status is null || profile is null || totals is null || up is null || down is null) break;
-                    bool running = B(state, "running"), error = S(state, "error") != "";
-                    status.Text = T(error ? "Error" : running ? "Running" : "Stopped"); status.Foreground = Brush(error ? "#FF453A" : running ? "#30D158" : "#8E8E93");
-                    profile.Text = S(state, "profile") == "" ? T("NoProfile") : S(state, "profile");
-                    Enable(start!, !running && S(state, "profile") != ""); Enable(stop!, running); Enable(restart!, running);
-                    var traffic = running ? await api.Call("traffic") : null;
-                    if (page != requestedPage || up is null || down is null || totals is null) break;
-                    up.Text = Bytes(N(traffic, "upload")) + "/s"; down.Text = Bytes(N(traffic, "download")) + "/s";
-                    totals.Text = $"{T("TotalUpload")} {Bytes(N(traffic, "upload_total"))}    {T("TotalDownload")} {Bytes(N(traffic, "download_total"))}    {T("Connections")} {N(traffic, "connections"):0}";
-                    samples.Enqueue((N(traffic, "upload"), N(traffic, "download"))); while (samples.Count > 60) samples.Dequeue(); DrawChart(); break;
-                case "Profiles":
-                    var profiles = await api.Call("profiles"); if (page != requestedPage || profileList is null) break;
-                    profileList.Children.Clear();
-                    if (profiles is not JsonArray array || array.Count == 0) { profileList.Children.Add(Card(Text(T("NoProfile"), 13, "#8E8E93"))); break; }
-                    foreach (var p in array) {
-                        string id = Uri.EscapeDataString(S(p, "id")); var box = new StackPanel { Spacing = 12 };
-                        box.Children.Add(Text(S(p, "name"), 18)); box.Children.Add(Text($"{T(S(p, "type") == "remote" ? "Remote" : "Local")} · {Date(S(p, "updated"))}", 12, "#8E8E93"));
-                        if (B(p, "enabled")) box.Children.Add(Text(T("Enabled"), 12, "#30D158"));
-                        box.Children.Add(Row(Button(T(B(p, "enabled") ? "Disable" : "Enable"), async () => { await api.Call("profiles/" + id, HttpMethod.Put, new { enabled = !B(p, "enabled") }); }), Button(T("Delete"), async () => { await api.Call("profiles/" + id, HttpMethod.Delete); })));
-                        profileList.Children.Add(Card(box));
-                    } break;
+                case "Dashboard": await RefreshDashboard(); break;
+                case "Groups": await RefreshGroups(); break;
                 case "Tools":
                     var tail = await api.Call("tools/tailscale", missingAllowed: true); if (page != requestedPage || tailStatus is null) break;
                     tailHint!.Visibility = tail is null || !B(tail, "enabled") || new[] { "hostname", "key_expiry", "last_sync" }.Any(key => S(tail, key) == "") || tail["ips"] is not JsonArray addresses || addresses.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
                     tailStatus.Text = tail?["enabled"] is null ? "—" : T(!B(tail, "enabled") ? "Disabled" : B(tail, "registered") ? "Registered" : "Unregistered"); tailStatus.Foreground = Brush(B(tail, "enabled") && B(tail, "registered") ? "#30D158" : "#8E8E93");
                     host!.Text = S(tail, "hostname") is "" ? "—" : S(tail, "hostname"); ips!.Text = tail?["ips"] is JsonArray ipArray && ipArray.Count > 0 ? string.Join("\n", ipArray.Select(x => x?.ToString())) : "—"; expiry!.Text = Date(S(tail, "key_expiry")); sync!.Text = "—"; // The API exposes cache sync time, not a handshake timestamp.
                     break;
-                case "Connections":
-                    var connections = B(state, "running") ? await api.Call("connections") : null;
-                    if (page != requestedPage || list is null) break;
-                    list.Items.Clear();
-                    if (connections?["connections"] is JsonArray cs) foreach (var c in cs) {
-                        var meta = c?["metadata"]; var destination = S(meta, "host"); if (destination == "") destination = S(meta, "destinationIP");
-                        var duration = DateTimeOffset.TryParse(S(c, "start"), out var since) ? Math.Max(0, (DateTimeOffset.UtcNow - since).TotalSeconds) : 0;
-                        var connectionText = Text($"{destination}    {S(meta, "network")}    {Bytes(N(c, "upload"))}    {Bytes(N(c, "download"))}    {duration:0}s"); Mono(connectionText); list.Items.Add(connectionText);
-                    } if (list.Items.Count == 0) list.Items.Add(Card(Text(T("Empty") + "\n" + T("EmptyHint"), 13, "#9A9AA0"))); break;
-                case "Logs":
-                    var logs = await api.Call("logs?limit=500&level=" + Uri.EscapeDataString(level)); if (page != requestedPage || list is null) break;
-                    // Keep list items stable while a user is reading older entries.
-                    var lines = (logs as JsonArray)?.Select(l => $"{S(l, "time")} [{S(l, "level")}] {S(l, "message")}").ToArray() ?? [];
-                    if (!lines.SequenceEqual(list.Items.Cast<string>())) { list.ItemsSource = null; list.Items.Clear(); foreach (var line in lines) list.Items.Add(line); if (autoScroll && list.Items.Count > 0) list.ScrollIntoView(list.Items[list.Items.Count - 1]); } break;
+                case "Connections": await RefreshConnections(); break;
+                case "Logs": _ = Run(RefreshLogs); break;
             }
         } catch (Exception ex) { Notice.Message = ex.Message; Notice.IsOpen = true; }
         finally { refreshing = false; }
