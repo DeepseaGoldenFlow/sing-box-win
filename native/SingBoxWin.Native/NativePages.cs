@@ -65,8 +65,7 @@ public sealed partial class MainWindow
     {
         dashboardCards.Clear();
         status = Text(T("Stopped"), 24); profile = Text(T("NoProfile"));
-        start = Button(T("Start"), () => Core("start"), true); stop = Button(T("Stop"), () => Core("stop")); restart = Button(T("Restart"), () => Core("restart"));
-        var box = new StackPanel { Spacing = 12 }; box.Children.Add(status); box.Children.Add(profile); box.Children.Add(Row(start, stop, restart));
+        var box = new StackPanel { Spacing = 12 }; box.Children.Add(status);
         memory = Text("..."); goroutines = Text("..."); box.Children.Add(Row(Text(T("Memory")), memory, Text("Goroutines"), goroutines)); AddDashboardCard(body, "Status", box);
         inbound = Text("..."); outbound = Text("..."); AddDashboardCard(body, "Connections", Row(Text(T("Inbound")), inbound, Text(T("Outbound")), outbound));
         up = Text("...", 28); uploadTotal = Text("..."); var u = new StackPanel { Spacing = 8 }; u.Children.Add(up); u.Children.Add(uploadTotal); AddDashboardCard(body, "Upload", u);
