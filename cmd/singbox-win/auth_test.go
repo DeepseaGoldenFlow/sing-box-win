@@ -101,13 +101,33 @@ func TestEngineWriteAPIsRequireBearerToken(t *testing.T) {
 	srv := newTestServer(t, a)
 	defer srv.Close()
 
+	// One entry per write route family, including the ones added later, so a new
+	// unauthenticated route cannot slip in behind an older passing check.
 	writes := []struct{ method, path, body string }{
 		{"POST", "/api/core/start", ""},
 		{"POST", "/api/core/stop", ""},
+		{"POST", "/api/protocol", `{"enabled":false}`},
 		{"POST", "/api/proxy", `{"enabled":false}`},
 		{"POST", "/api/quit", ""},
 		{"PUT", "/api/node/select", `{"group":"g","name":"n"}`},
 		{"DELETE", "/api/logs", ""},
+		{"POST", "/api/profiles", `{"name":"n","url":"https://example.com/p"}`},
+		{"POST", "/api/profiles/import", `{"name":"n","url":"https://example.com/p"}`},
+		{"POST", "/api/profiles/import/file", `{"name":"n","data":""}`},
+		{"POST", "/api/profiles/import/bpf", `{"data":""}`},
+		{"POST", "/api/profiles/import/qr", `{"name":"n","data":""}`},
+		{"POST", "/api/profiles/00000000/update", ""},
+		{"PUT", "/api/profiles/00000000", `{"name":"n"}`},
+		{"DELETE", "/api/profiles/00000000", ""},
+		{"POST", "/api/settings", `{}`},
+		{"POST", "/api/routing", `{}`},
+		{"POST", "/api/node/delay", `{"group":"g","name":"n"}`},
+		{"POST", "/api/tools/connectivity", `{}`},
+		{"POST", "/api/tools/tailscale/test", `{}`},
+		{"POST", "/api/tools/tailscale/exit-node", `{}`},
+		{"POST", "/api/groups/urltest", `{}`},
+		{"PUT", "/api/native/core", `{}`},
+		{"PUT", "/api/native/profile", `{}`},
 	}
 	for _, w := range writes {
 		resp := doRequest(t, w.method, srv.URL+w.path, "", "", w.body)
