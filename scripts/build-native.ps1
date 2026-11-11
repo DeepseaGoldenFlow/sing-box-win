@@ -1,6 +1,18 @@
 $ErrorActionPreference = 'Stop'
 Push-Location (Split-Path $PSScriptRoot -Parent)
 try {
+    # Non-interactive sessions (e.g. launched from WSL) may not have the machine-wide
+    # .NET SDK on PATH or set DOTNET_ROOT, so VS MSBuild's DotNetSdkResolver cannot
+    # resolve Microsoft.NET.Sdk. Point it at the standard install location.
+    $programFiles = if ($env:ProgramFiles) { $env:ProgramFiles } else { 'C:\Program Files' }
+    $dotnetRoot = Join-Path $programFiles 'dotnet'
+    if (Test-Path (Join-Path $dotnetRoot 'dotnet.exe')) {
+        if (!$env:DOTNET_ROOT -or !(Test-Path (Join-Path $env:DOTNET_ROOT 'dotnet.exe'))) { $env:DOTNET_ROOT = $dotnetRoot }
+        if (($env:PATH -split ';' | ForEach-Object { $_.TrimEnd('\') }) -notcontains $dotnetRoot) { $env:PATH = "$dotnetRoot;$env:PATH" }
+        Write-Host "[env] DOTNET_ROOT=$env:DOTNET_ROOT"
+    } else {
+        Write-Warning "dotnet.exe not found under $dotnetRoot; MSBuild may fail to resolve Microsoft.NET.Sdk."
+    }
     Write-Host '[1/4] Building native client (Release, self-contained win-x64)...'
     # WinUI PRI packaging tasks require Visual Studio MSBuild on this machine.
     $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
