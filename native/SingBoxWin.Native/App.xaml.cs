@@ -1,8 +1,15 @@
 using Microsoft.UI.Xaml;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 namespace SingBoxWin.Native;
 public partial class App : Application
 {
+    // Earliest managed timestamp. The engine reports its own t0 (process start)
+    // and startup.go measures every other stage against it; the window reports
+    // its first painted frame relative to this clock so requirement C has a
+    // number instead of an impression. Activity is measured in the client, the
+    // engine only records it.
+    internal static readonly Stopwatch StartupClock = Stopwatch.StartNew();
     private Mutex? instance;
     private EventWaitHandle? activation;
     private MainWindow? window;

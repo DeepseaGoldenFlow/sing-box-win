@@ -159,7 +159,7 @@ func (a *App) pageAPI(w http.ResponseWriter, r *http.Request) bool {
 		reply(w, out)
 		return true
 	}
-	if path != "/api/groups" && !strings.HasPrefix(path, "/api/groups/") && path != "/api/native/core" && path != "/api/native/status" && path != "/api/native/profile" {
+	if path != "/api/groups" && !strings.HasPrefix(path, "/api/groups/") && path != "/api/native/core" && path != "/api/native/status" && path != "/api/native/profile" && path != "/api/native/startup" && path != "/api/native/ui-ready" {
 		return false
 	}
 	a.mu.Lock()
@@ -269,7 +269,7 @@ func (a *App) pageAPI(w http.ResponseWriter, r *http.Request) bool {
 				}
 			}
 		}
-		reply(w, map[string]any{"memory": memory.Total(), "goroutines": runtime.NumGoroutine(), "core_path": exe, "connections_in": inCount, "connections_out": outCount, "tun_available": false, "counter_source": "traffic-connections/core-connection-manager"})
+		reply(w, map[string]any{"memory": memory.Total(), "goroutines": runtime.NumGoroutine(), "core_path": exe, "connections_in": inCount, "connections_out": outCount, "tun_available": false, "counter_source": "traffic-connections/core-connection-manager", "log_files": a.logFileStatus(), "startup": a.startup.Marks()})
 
 	case path == "/api/native/core" && r.Method == "GET":
 		reply(w, a.nativeOptions())
@@ -288,6 +288,11 @@ func (a *App) pageAPI(w http.ResponseWriter, r *http.Request) bool {
 			http.Error(w, e.Error(), 500)
 			break
 		}
+		// Requirement A: engine.log follows the same level gate, without a
+		// restart, so turning diagnostics on captures the next start.
+		if a.logFile != nil {
+			a.logFile.SetLevel(a.fileLogLevel())
+		}
 		if a.core != nil {
 			proxy := a.proxy
 			if e := a.stop(); e != nil {
@@ -304,6 +309,46 @@ func (a *App) pageAPI(w http.ResponseWriter, r *http.Request) bool {
 			}
 		}
 		reply(w, n)
+	case path == "/api/native/startup" && r.Method == "GET":
+		reply(w, map[string]any{"marks": a.startup.Marks(), "core_started_at": a.startupCoreStartedAt()})
+	case path == "/api/native/ui-ready" && r.Method == "POST":
+		// Requirement C evidence: the native window reports its first rendered
+		// frame here, so engine.log shows whether the window beat the core.
+		//
+		// The UI is a separate process with a different t0, so elapsed_ms alone
+		// cannot be compared with this process's processStart. The client sends
+		// the absolute instant (at_unix_ms) and elapsed_ms is only used as a
+		// fallback for external callers that measure against the engine clock.
+		var b struct {
+			AtUnixMs  int64  `json:"at_unix_ms"`
+			ElapsedMs int64  `json:"elapsed_ms"`
+			Phase     string `json:"phase"`
+		}
+		_ = decode(r, &b)
+		if b.Phase == "" {
+			b.Phase = "ui-first-frame"
+		}
+		at := time.Now()
+		if b.AtUnixMs > 0 {
+			at = time.UnixMilli(b.AtUnixMs)
+		} else if b.ElapsedMs > 0 {
+			at = processStart.Add(time.Duration(b.ElapsedMs) * time.Millisecond)
+		}
+		fields := map[string]any{"phase": b.Phase, "unix_ms": at.UnixMilli()}
+		if b.ElapsedMs > 0 {
+			fields["client_elapsed_ms"] = b.ElapsedMs
+		}
+		a.startup.MarkAt(nodeUIFirstFrame, at, fields)
+		// Answer with the frame that was actually recorded, so a retry cannot
+		// make the window look slower (or faster) than the first paint.
+		uiAt, _ := a.startup.First(nodeUIFirstFrame)
+		coreAt, coreOK := a.startup.CoreStarted()
+		reply(w, map[string]any{
+			"ok":                 true,
+			"ui_ms":              uiAt.Sub(processStart).Milliseconds(),
+			"core_ms":            msSince(processStart, coreAt, coreOK),
+			"window_before_core": !coreOK || uiAt.Before(coreAt),
+		})
 	case path == "/api/native/profile" && r.Method == "PUT":
 		var b struct {
 			ID string `json:"id"`

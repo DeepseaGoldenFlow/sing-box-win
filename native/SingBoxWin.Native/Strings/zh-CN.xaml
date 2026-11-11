@@ -7,6 +7,7 @@
  <x:String x:Key="Settings">设置</x:String>
  <x:String x:Key="Running">运行中</x:String>
  <x:String x:Key="Stopped">已停止</x:String>
+ <x:String x:Key="Starting">启动中</x:String>
  <x:String x:Key="Connecting...">连接中…</x:String>
  <x:String x:Key="Service not started">服务未启动</x:String>
  <x:String x:Key="Error">错误</x:String>
@@ -203,4 +204,5 @@
  <x:String x:Key="QR Code Hint">此二维码由引擎按 sing-box 标准格式生成；配置超过单张二维码容量时会自动降级为订阅链接二维码，否则提示改用导出文件。</x:String>
  <x:String x:Key="QR Deep Link Fallback">配置超过单张二维码容量，已降级为订阅链接二维码。</x:String>
  <x:String x:Key="QR Image Too Large">二维码图片不能超过 8 MiB</x:String>
+ <x:String x:Key="Diagnostic Log Hint">诊断日志：选择 Debug / Trace 才写入 engine.log，默认 Info。单个日志文件超过 5 MiB 轮转，保留 2 份。</x:String>
 </ResourceDictionary>

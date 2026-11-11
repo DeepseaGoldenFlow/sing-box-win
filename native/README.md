@@ -13,7 +13,9 @@ Verified against `cmd/singbox-win/main.go`, `client.go`, `tools.go` before imple
 | Method / source | Fields consumed or submitted |
 | --- | --- |
 | `%APPDATA%/sing-box-win/runtime.json` | `url`, `pid` (engine process metadata); only a loopback HTTP URL is accepted |
-| GET `/api/state` | `running`, `profile`, `system_proxy`, `error` |
+| GET `/api/state` | `running`, `starting`, `profile`, `system_proxy`, `error`; `starting` is true while the engine brings the core up off the request path, so the client shows Starting instead of Stopped |
+| GET `/api/native/startup` | `marks[]` (`node`, `ms`, `at`), `core_started_at`; every stage is logged once as a `startup-timing` record |
+| POST `/api/native/ui-ready` | request `at_unix_ms`, `elapsed_ms`, `phase`; the window reports its first painted frame so `engine.log` shows whether it preceded the core. Response: `ui_ms`, `core_ms`, `window_before_core` |
 | POST `/api/core/start`, `/api/core/stop`, `/api/core/restart` | no request body; HTTP success or raw error body |
 | GET `/api/traffic` | `upload`, `download`, `upload_total`, `download_total`, `connections`; requested only while core runs |
 | GET `/api/profiles` | array or null: `id`, `name`, `type`, `updated`, `enabled`; subscription `url` is not rendered or persisted by the frontend |
@@ -37,3 +39,5 @@ No subscription URLs or tokens are written to logs or committed. UI errors are d
 P4: Windows Release self-contained x64 build passed with zero warnings and zero errors. Packaging produced 445 files including the Go engine. XML/resource checks and `git diff --check` also pass. WindowsAppSDK 1.6 and Windows SDK BuildTools remain pinned; no packages were added. The tools page uses real engine data and shows HTTP status and milliseconds for both successful and failed tests. The current API supplies no handshake timestamp, so that field displays an em dash with an explanation. Unhandled errors go to `%APPDATA%/sing-box-win/native-error.log`; trace logging has been removed.
 
 On Windows, run `powershell -ExecutionPolicy Bypass -File scripts/build-native.ps1`, then verify: cold start without runtime.json; reconnect with existing engine; error/retry when engine is absent; start/stop/restart and no-profile disabled state; real traffic plotting; URL import and engine rejection while switching a running profile; Tailscale enabled/unregistered/registered plus 404 fallback and failed test; settings persistence, Chinese/English switch, light/dark switch; background close followed by a second launch; explicit quit; connection close all; log filtering with auto scroll disabled. Confirm 1040×720 initial size, 900×620 minimum, title dragging/caption buttons and actual macOS-like visual fit at 100%/150% DPI.
+
+Startup ordering (requirement C): the window is created and activated before `ConnectAsync` runs, and `ConnectAsync` is now deferred until `Root.Loaded` has fired, so the first frame is painted before engine discovery begins. Verify on Windows with `%APPDATA%\sing-box-win\engine.log`: the `ui-first-frame` record must precede `core-started` (or exist before the core is up), and `POST /api/native/ui-ready` must answer `window_before_core:true` on a cold start.

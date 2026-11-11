@@ -74,7 +74,14 @@ accepted for compatibility.
   HTTP 200/301/302 succeeds. A stopped core returns `error:"core not running"`.
 
 Core auto-connect continues to follow settings. Logs are also appended to
-`engine.log` in the data directory. Windows builds must use
+`engine.log` in the data directory. The file keeps `info` and above by default;
+`debug`/`trace` are written only while Settings → 日志级别 is set to them. A file
+rotates at 5 MiB into `engine.log.1` / `engine.log.2`, so the total stays under
+15 MiB, and `startup-timing` records are excluded from the rotation budget.
+The engine also writes the upstream `cache.db` next to the log, so remotely
+fetched rule-sets are restored from cache on the next start instead of being
+downloaded synchronously.
+Windows builds must use
 `-ldflags '-H windowsgui -s -w'` to prevent a console window (included in `make build`).
 Checks require the build tags from the Makefile, including `with_gvisor`.
 
