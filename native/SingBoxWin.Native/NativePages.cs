@@ -99,10 +99,13 @@ public sealed partial class MainWindow
         profiles.Children.Add(profilePicker);
         profileActions.Clear();
         profileSummary = Text("", 12, "#9A9AA0"); profiles.Children.Add(profileSummary);
-        profiles.Children.Add(Row(Button(T("Import Profile"), Import), ProfileAction("Edit Profile", () => EditProfile(SelectedProfileID())),
+        profiles.Children.Add(Row(Button(T("Import Profile"), Import), Button(T("Import From QR Image"), ImportFromQRImage),
+            ProfileAction("Edit Profile", () => EditProfile(SelectedProfileID())),
             profileUpdateButton = ProfileAction("Update Profile", () => UpdateProfile(SelectedProfileID()))));
         profiles.Children.Add(Row(Button(T("Manage Profiles"), ManageProfiles), ProfileAction("View Content", () => ProfileContent(SelectedProfileID())),
-            ProfileAction("Export Profile", () => ExportProfile(SelectedProfileID())), ProfileAction("Delete", () => DeleteProfile(SelectedProfileID()))));
+            ProfileAction("Export Profile", () => ExportProfile(SelectedProfileID())), ProfileAction("Show QR Code", () => ShowQRCode(SelectedProfileID()))));
+        profiles.Children.Add(Row(ProfileAction("Save QR Code", async () => { var share = await QRShare(SelectedProfileID()); await SaveQRCode(share.image); }),
+            ProfileAction("Delete", () => DeleteProfile(SelectedProfileID()))));
         AddDashboardCard(body, "Profile", profiles);
         var profileCard = dashboardCards["Profile"]; body.Children.Remove(profileCard); body.Children.Insert(0, profileCard);
         PairDashboardCards(body, "Status", "Connections");

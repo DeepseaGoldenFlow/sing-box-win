@@ -3,8 +3,10 @@ module github.com/JARVIS/sing-box-win
 go 1.25.5
 
 require (
+	github.com/makiuchi-d/gozxing v0.1.1
 	github.com/sagernet/sing v0.9.7-0.20261023115459-5dc452e537bf
 	github.com/sagernet/sing-box v1.14.4
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	golang.org/x/sys v0.47.0
 )
 
@@ -173,6 +175,7 @@ require (
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.47.0 // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect

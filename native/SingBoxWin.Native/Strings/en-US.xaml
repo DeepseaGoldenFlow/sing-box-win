@@ -197,4 +197,10 @@
  <x:String x:Key="Export Format Hint">JSON is human-readable and editable; BPF is sing-box's standard binary format, readable by SFM and other official clients.</x:String>
  <x:String x:Key="BPF">BPF</x:String>
  <x:String x:Key="JSON">JSON</x:String>
+ <x:String x:Key="Show QR Code">Show QR code</x:String>
+ <x:String x:Key="Save QR Code">Save QR code</x:String>
+ <x:String x:Key="Import From QR Image">Import from QR image</x:String>
+ <x:String x:Key="QR Code Hint">The engine renders this code in sing-box's standard format. Configurations larger than one QR symbol are downgraded to a subscription-link code; local profiles with no subscription URL are asked to use file export instead.</x:String>
+ <x:String x:Key="QR Deep Link Fallback">Configuration exceeds one QR symbol; downgraded to a subscription-link code.</x:String>
+ <x:String x:Key="QR Image Too Large">The QR image must not exceed 8 MiB</x:String>
 </ResourceDictionary>

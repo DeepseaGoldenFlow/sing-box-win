@@ -390,6 +390,36 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			result, err = a.importProfileBytes(data, b.Name)
 		}
+	case r.URL.Path == "/api/profiles/import/qr" && r.Method == "POST":
+		// A QR image chosen in the file picker arrives as bytes for the same
+		// broker-handle reason as a profile file. Decoding happens in qr.go and
+		// the result re-enters importProfileBytes/importDeepLink, so the normal
+		// size, decompression and unique-name checks still apply.
+		var b struct {
+			Name string `json:"name"`
+			Path string `json:"path"`
+			Data string `json:"data"` // base64 image bytes
+		}
+		if err = decode(r, &b); err != nil {
+			break
+		}
+		var data []byte
+		switch {
+		case strings.TrimSpace(b.Data) != "":
+			data, err = base64.StdEncoding.DecodeString(strings.TrimSpace(b.Data))
+		case strings.TrimSpace(b.Path) != "":
+			var info os.FileInfo
+			if info, err = os.Stat(b.Path); err == nil && info.Size() > qrImageLimit {
+				err = errors.New("二维码图片超过 8 MiB")
+			} else if err == nil {
+				data, err = os.ReadFile(b.Path)
+			}
+		default:
+			err = errors.New("请选择要导入的二维码图片")
+		}
+		if err == nil {
+			result, err = a.importQRImage(data, b.Name)
+		}
 	case r.URL.Path == "/api/logs" && r.Method == "DELETE":
 		a.logMu.Lock()
 		a.logs = nil
@@ -529,6 +559,29 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 			_, err = w.Write(data)
 			return
+		case len(parts) == 2 && parts[1] == "qr" && r.Method == "GET":
+			// The engine renders the PNG (and decides BPF vs deep-link
+			// fallback) so the UI only displays or saves bytes it is given.
+			var share qrShare
+			share, err = a.profileQR(*p)
+			if err != nil {
+				break
+			}
+			payload := share.Payload
+			if share.Format == "deep-link" {
+				payload = []byte(share.Text)
+			}
+			var png []byte
+			png, err = qrPNG(payload)
+			if err != nil {
+				break
+			}
+			result = map[string]any{
+				"format": share.Format,
+				"note":   share.Note,
+				"size":   share.Size,
+				"image":  base64.StdEncoding.EncodeToString(png),
+			}
 		case len(parts) == 2 && parts[1] == "update" && r.Method == "POST":
 			err = a.refresh(p)
 		case len(parts) == 1 && r.Method == "GET":
