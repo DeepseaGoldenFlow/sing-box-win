@@ -1,6 +1,18 @@
 $ErrorActionPreference = 'Stop'
 Push-Location (Split-Path $PSScriptRoot -Parent)
 try {
+    # Non-interactive sessions (e.g. launched from WSL) may not have the machine-wide
+    # .NET SDK on PATH or set DOTNET_ROOT, so VS MSBuild's DotNetSdkResolver cannot
+    # resolve Microsoft.NET.Sdk. Point it at the standard install location.
+    $programFiles = if ($env:ProgramFiles) { $env:ProgramFiles } else { 'C:\Program Files' }
+    $dotnetRoot = Join-Path $programFiles 'dotnet'
+    if (Test-Path (Join-Path $dotnetRoot 'dotnet.exe')) {
+        if (!$env:DOTNET_ROOT -or !(Test-Path (Join-Path $env:DOTNET_ROOT 'dotnet.exe'))) { $env:DOTNET_ROOT = $dotnetRoot }
+        if (($env:PATH -split ';' | ForEach-Object { $_.TrimEnd('\') }) -notcontains $dotnetRoot) { $env:PATH = "$dotnetRoot;$env:PATH" }
+        Write-Host "[env] DOTNET_ROOT=$env:DOTNET_ROOT"
+    } else {
+        Write-Warning "dotnet.exe not found under $dotnetRoot; MSBuild may fail to resolve Microsoft.NET.Sdk."
+    }
     Write-Host '[1/4] Building native client (Release, self-contained win-x64)...'
     # WinUI PRI packaging tasks require Visual Studio MSBuild on this machine.
     $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -19,11 +31,19 @@ try {
     Copy-Item 'build\sing-box-win.exe' 'build\native\sing-box-win.exe' -Force
     Write-Host '[4/4] Creating build\native.zip...'
     if (Test-Path 'build\native.zip') { Remove-Item 'build\native.zip' -Force }
-    if (Get-Command python -ErrorAction SilentlyContinue) {
-        python scripts\make-release-zip.py
+    # On Windows `python` may only be the Microsoft Store execution alias: it resolves on
+    # PATH but fails at run time (exit 9009), so probe for real interpreters instead.
+    $python = $null
+    foreach ($candidate in @('python', 'python3')) {
+        if (!(Get-Command $candidate -ErrorAction SilentlyContinue)) { continue }
+        try { $probe = & $candidate -c 'print(1)' 2>$null } catch { continue }
+        if ($LASTEXITCODE -eq 0 -and "$probe".Trim()) { $python = $candidate; break }
+    }
+    if ($python) {
+        & $python scripts\make-release-zip.py
         if ($LASTEXITCODE -ne 0) { throw "make-release-zip.py failed: $LASTEXITCODE" }
     } else {
-        Write-Warning 'No python; run scripts/make-release-zip.py on the Linux side'
+        Write-Warning 'No working python found; build\native.zip not created. Run scripts/make-release-zip.py on the Linux side.'
     }
     $count = (Get-ChildItem 'build\native' -File -Recurse | Measure-Object).Count
     Write-Host "Done: build\native.zip ($count files in build\native)"
