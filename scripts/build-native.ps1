@@ -31,11 +31,19 @@ try {
     Copy-Item 'build\sing-box-win.exe' 'build\native\sing-box-win.exe' -Force
     Write-Host '[4/4] Creating build\native.zip...'
     if (Test-Path 'build\native.zip') { Remove-Item 'build\native.zip' -Force }
-    if (Get-Command python -ErrorAction SilentlyContinue) {
-        python scripts\make-release-zip.py
+    # On Windows `python` may only be the Microsoft Store execution alias: it resolves on
+    # PATH but fails at run time (exit 9009), so probe for real interpreters instead.
+    $python = $null
+    foreach ($candidate in @('python', 'python3')) {
+        if (!(Get-Command $candidate -ErrorAction SilentlyContinue)) { continue }
+        try { $probe = & $candidate -c 'print(1)' 2>$null } catch { continue }
+        if ($LASTEXITCODE -eq 0 -and "$probe".Trim()) { $python = $candidate; break }
+    }
+    if ($python) {
+        & $python scripts\make-release-zip.py
         if ($LASTEXITCODE -ne 0) { throw "make-release-zip.py failed: $LASTEXITCODE" }
     } else {
-        Write-Warning 'No python; run scripts/make-release-zip.py on the Linux side'
+        Write-Warning 'No working python found; build\native.zip not created. Run scripts/make-release-zip.py on the Linux side.'
     }
     $count = (Get-ChildItem 'build\native' -File -Recurse | Measure-Object).Count
     Write-Host "Done: build\native.zip ($count files in build\native)"
