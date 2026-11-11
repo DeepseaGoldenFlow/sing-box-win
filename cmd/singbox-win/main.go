@@ -34,7 +34,7 @@ import (
 	"time"
 )
 
-const version = "0.6.0"
+const version = "0.7.0"
 
 type Profile struct {
 	AutoUpdate    *bool     `json:"auto_update,omitempty"`

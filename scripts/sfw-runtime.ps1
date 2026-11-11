@@ -64,7 +64,9 @@ function Invoke-SfwStatus {
         [string]$ContentType = 'application/json'
     )
     $parameters = @{ Uri = $Uri; Method = $Method; Headers = $Headers; UseBasicParsing = $true }
-    if ($null -ne $Body) { $parameters.Body = $Body; $parameters.ContentType = $ContentType }
+    # [string]$Body coerces $null to '' so '-ne $null' is always true; check emptiness.
+    if (-not [string]::IsNullOrEmpty($Body)) { $parameters.Body = $Body; $parameters.ContentType = $ContentType }
+    elseif ($Method -ne 'GET') { $parameters.Body = '{}'; $parameters.ContentType = $ContentType }
     try {
         $response = Invoke-WebRequest @parameters -ErrorAction Stop
         return [int]$response.StatusCode
@@ -95,5 +97,6 @@ function Invoke-SfwAPI {
         $parameters.ContentType = 'application/json'
         $parameters.Body = ($Body | ConvertTo-Json -Compress)
     }
+    elseif ($Method -ne 'GET') { $parameters.ContentType = 'application/json'; $parameters.Body = '{}' }
     return Invoke-RestMethod @parameters
 }
