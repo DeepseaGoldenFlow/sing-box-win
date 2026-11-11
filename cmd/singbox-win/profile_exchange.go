@@ -159,9 +159,18 @@ func (a *App) addProfile(imp profileImport) (Profile, error) {
 // singboxwin:// link. The remote host default name follows upstream
 // ParseRemoteProfileImportLink (libbox/remote_profile.go:32-35).
 func (a *App) importDeepLink(link string) (Profile, error) {
+	return a.importDeepLinkAs(link, "")
+}
+
+// importDeepLinkAs is importDeepLink with a caller-supplied name override,
+// mirroring importBPFAs. An empty name keeps the name carried by the link.
+func (a *App) importDeepLinkAs(link, name string) (Profile, error) {
 	parsed, err := parseDeepLink(link)
 	if err != nil {
 		return Profile{}, err
+	}
+	if strings.TrimSpace(name) != "" {
+		parsed.Name = name
 	}
 	data, err := fetch(parsed.URL)
 	if err != nil {

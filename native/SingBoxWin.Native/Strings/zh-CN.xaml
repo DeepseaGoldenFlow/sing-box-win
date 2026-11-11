@@ -197,4 +197,10 @@
  <x:String x:Key="Export Format Hint">JSON 便于阅读与编辑；BPF 为 sing-box 标准二进制格式，可被 SFM 等官方客户端直接读取。</x:String>
  <x:String x:Key="BPF">BPF</x:String>
  <x:String x:Key="JSON">JSON</x:String>
+ <x:String x:Key="Show QR Code">显示二维码</x:String>
+ <x:String x:Key="Save QR Code">保存二维码</x:String>
+ <x:String x:Key="Import From QR Image">从二维码图片导入</x:String>
+ <x:String x:Key="QR Code Hint">此二维码由引擎按 sing-box 标准格式生成；配置超过单张二维码容量时会自动降级为订阅链接二维码，否则提示改用导出文件。</x:String>
+ <x:String x:Key="QR Deep Link Fallback">配置超过单张二维码容量，已降级为订阅链接二维码。</x:String>
+ <x:String x:Key="QR Image Too Large">二维码图片不能超过 8 MiB</x:String>
 </ResourceDictionary>
