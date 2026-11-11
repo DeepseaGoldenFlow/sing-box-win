@@ -10,8 +10,6 @@ public partial class App : Application
     // number instead of an impression. Activity is measured in the client, the
     // engine only records it.
     internal static readonly Stopwatch StartupClock = Stopwatch.StartNew();
-    private Mutex? instance;
-    private EventWaitHandle? activation;
     private MainWindow? window;
     private static void WriteError(object? error)
     {
