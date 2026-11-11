@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using System.Text.Json.Nodes;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage.Pickers;
@@ -102,6 +103,80 @@ public sealed partial class MainWindow
         await SaveProfileFile(id, string.IsNullOrWhiteSpace(name) ? "profile" : name, result == ContentDialogResult.Primary ? "bpf" : "json");
     }
 
+    // ShowQRCode displays the engine-rendered QR image. The engine decides the
+    // payload (BPF container, or the deep-link fallback when it does not fit),
+    // so the UI only renders the PNG and repeats the engine's downgrade note.
+    private async Task ShowQRCode(string id)
+    {
+        var share = await QRShare(id);
+        var image = new BitmapImage();
+        // DataWriter is the WinRT-safe way to fill an in-memory stream on .NET 8;
+        // byte[].AsBuffer() lives in an assembly that modern WinUI projects omit.
+        var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+        using (var writer = new Windows.Storage.Streams.DataWriter(stream)) {
+            writer.WriteBytes(share.image);
+            await writer.StoreAsync();
+            await writer.FlushAsync();
+            writer.DetachStream();
+        }
+        stream.Seek(0);
+        await image.SetSourceAsync(stream);
+        var panel = new StackPanel { Spacing = 12, MinWidth = 340, HorizontalAlignment = HorizontalAlignment.Center };
+        panel.Children.Add(new Image { Source = image, Width = 320, Height = 320, Stretch = Stretch.Uniform });
+        // The engine reports a downgrade; the wording lives in the string
+        // tables so the note follows the UI language rather than the engine's.
+        bool fallback = share.format == "deep-link";
+        panel.Children.Add(Text(T(fallback ? "QR Deep Link Fallback" : "QR Code Hint"), 12, fallback ? "#FF9F0A" : "#9A9AA0"));
+        var error = Text("", 12, "#FF453A"); panel.Children.Add(error);
+        var dialog = ProfileDialog(T("Show QR Code"), panel, T("Save QR Code"));
+        dialog.PrimaryButtonClick += async (_, args) => {
+            var deferral = args.GetDeferral();
+            try { await SaveQRCode(share.image); }
+            catch (Exception ex) { args.Cancel = true; error.Text = ex.Message; }
+            finally { deferral.Complete(); }
+        };
+        await dialog.ShowAsync();
+    }
+
+    // QRShare fetches the engine-rendered PNG. The engine returns base64, so
+    // the native client never encodes a QR itself and the displayed and saved
+    // images are byte-identical.
+    private async Task<(byte[] image, string format, string note)> QRShare(string id)
+    {
+        var share = await api.Call("profiles/" + id + "/qr");
+        return (Convert.FromBase64String(S(share, "image")), S(share, "format"), S(share, "note"));
+    }
+
+    // SaveQRCode writes the exact PNG the dialog shows, so a saved file cannot
+    // drift from the displayed symbol.
+    private async Task SaveQRCode(byte[] image)
+    {
+        var picker = new FileSavePicker { SuggestedFileName = "sing-box-profile-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") };
+        picker.FileTypeChoices.Add("PNG", new List<string> { ".png" });
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+        var file = await picker.PickSaveFileAsync();
+        if (file is null) return;
+        await Windows.Storage.FileIO.WriteBytesAsync(file, image);
+    }
+
+    // ImportFromQRImage sends the picked image to the engine, which decodes it
+    // and reuses the ordinary import validation (size caps, unique names).
+    private async Task ImportFromQRImage()
+    {
+        var picker = new FileOpenPicker();
+        picker.FileTypeFilter.Add(".png");
+        picker.FileTypeFilter.Add(".jpg");
+        picker.FileTypeFilter.Add(".jpeg");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+        var file = await picker.PickSingleFileAsync();
+        if (file is null) return;
+        if ((await file.GetBasicPropertiesAsync()).Size > 8 * 1024 * 1024) throw new InvalidOperationException(T("QR Image Too Large"));
+        var buffer = await Windows.Storage.FileIO.ReadBufferAsync(file);
+        var data = new byte[buffer.Length];
+        using (var reader = Windows.Storage.Streams.DataReader.FromBuffer(buffer)) reader.ReadBytes(data);
+        await api.Call("profiles/import/qr", HttpMethod.Post, new { data = Convert.ToBase64String(data) });
+    }
+
     // SaveProfileFile streams the engine-rendered bytes (JSON or BPF) to disk.
     // The picker's default name carries profile name + timestamp, matching
     // SFM's SaveFile/ShareFile behaviour, and the engine picks the final name.
@@ -137,7 +212,7 @@ public sealed partial class MainWindow
                     return b;
                 }
                 entry.Children.Add(Row(Action("Enable", "enable", !B(p, "enabled")), Action("Edit Profile", "edit"), Action("View Content", "content")));
-                entry.Children.Add(Row(Action("Update Profile", "update", S(p, "url") != ""), Action("Export Profile", "export"), Action("Delete", "delete")));
+                entry.Children.Add(Row(Action("Update Profile", "update", S(p, "url") != ""), Action("Export Profile", "export"), Action("Show QR Code", "qr"), Action("Delete", "delete")));
                 panel.Children.Add(Card(entry));
             }
             await dialog.ShowAsync();
@@ -148,6 +223,7 @@ public sealed partial class MainWindow
                 case "content": await ProfileContent(chosen); break;
                 case "update": await UpdateProfile(chosen); break;
                 case "export": await ExportProfile(chosen); break;
+                case "qr": await ShowQRCode(chosen); break;
                 case "delete": await DeleteProfile(chosen); break;
             }
             state = await api.Call("state");
