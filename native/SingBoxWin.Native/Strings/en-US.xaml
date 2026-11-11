@@ -7,6 +7,7 @@
  <x:String x:Key="Settings">Settings</x:String>
  <x:String x:Key="Running">Running</x:String>
  <x:String x:Key="Stopped">Stopped</x:String>
+ <x:String x:Key="Starting">Starting</x:String>
  <x:String x:Key="Connecting...">Connecting…</x:String>
  <x:String x:Key="Service not started">Service not started</x:String>
  <x:String x:Key="Error">Error</x:String>
@@ -203,4 +204,5 @@
  <x:String x:Key="QR Code Hint">The engine renders this code in sing-box's standard format. Configurations larger than one QR symbol are downgraded to a subscription-link code; local profiles with no subscription URL are asked to use file export instead.</x:String>
  <x:String x:Key="QR Deep Link Fallback">Configuration exceeds one QR symbol; downgraded to a subscription-link code.</x:String>
  <x:String x:Key="QR Image Too Large">The QR image must not exceed 8 MiB</x:String>
+ <x:String x:Key="Diagnostic Log Hint">Diagnostic logging: engine.log keeps Info by default; Debug/Trace are written only when selected. Files rotate at 5 MiB, two backups kept.</x:String>
 </ResourceDictionary>

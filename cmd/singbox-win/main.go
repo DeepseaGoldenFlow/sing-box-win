@@ -86,21 +86,41 @@ type App struct {
 	trafficTime       time.Time
 	uploadTotal       float64
 	downloadTotal     float64
+
+	// Engine file log with level gate and rotation (logfile.go).
+	logFile *engineLogFile
+	// Startup stage timings (startup.go).
+	startup *startupRecorder
+	// Core startup runs in the background so the API and the UI are never
+	// blocked on rule-set downloads or profile parsing.
+	starting    bool
+	startCancel context.CancelFunc
+}
+
+// fileLogLevel returns the level written to engine.log. The default is info;
+// debug/trace are written only while diagnostics are enabled in the native
+// settings, which is stored as native-core.json log_level.
+func (a *App) fileLogLevel() blog.Level {
+	parsed, err := blog.ParseLevel(a.nativeOptions().LogLevel)
+	if err != nil {
+		return blog.LevelInfo
+	}
+	return parsed
 }
 
 func (a *App) WriteMessage(level blog.Level, msg string) {
+	entry := Log{Time: time.Now().Format(time.RFC3339), Level: blog.FormatLevel(level), Message: msg}
 	a.logMu.Lock()
-	defer a.logMu.Unlock()
-	entry := Log{time.Now().Format(time.RFC3339), blog.FormatLevel(level), msg}
 	a.logs = append(a.logs, entry)
-	if a.dir != "" {
-		if f, err := os.OpenFile(filepath.Join(a.dir, "engine.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600); err == nil {
-			_ = json.NewEncoder(f).Encode(entry)
-			_ = f.Close()
-		}
-	}
 	if len(a.logs) > 5000 {
 		a.logs = append([]Log(nil), a.logs[len(a.logs)-5000:]...)
+	}
+	a.logMu.Unlock()
+	if a.logFile == nil || level > a.logFile.Level() {
+		return
+	}
+	if line := encodeLogLine(entry); line != nil {
+		a.logFile.Write(line, true)
 	}
 }
 func (a *App) DisableColors() bool { return true }
@@ -119,6 +139,10 @@ func (a *App) profilePath(id string) string { return filepath.Join(a.dir, "profi
 func id() string                            { var b [16]byte; _, _ = rand.Read(b[:]); return hex.EncodeToString(b[:]) }
 func (a *App) stop() error {
 	a.stopEndpointStatus()
+	if a.startCancel != nil {
+		a.startCancel()
+		a.startCancel = nil
+	}
 	if a.logStreamCancel != nil {
 		a.logStreamCancel()
 		a.logStreamCancel = nil
@@ -135,10 +159,30 @@ func (a *App) stop() error {
 	}
 	return nil
 }
+
+// start prepares and starts the core synchronously. Callers that must not block
+// the UI or the API (main auto-connect) use startAsync instead.
 func (a *App) start() error {
 	if a.core != nil {
 		return nil
 	}
+	prepared, err := a.prepareOptions()
+	if err != nil {
+		return err
+	}
+	return a.startPrepared(prepared)
+}
+
+// preparedProfile is a parsed profile with the client-side rewrites applied,
+// ready to hand to the core. Building it touches only the profile file, so it
+// can run before (or in parallel with) any window work.
+type preparedProfile struct {
+	options  option.Options
+	profile  Profile
+	ruleSets ruleSetInventory
+}
+
+func (a *App) prepareOptions() (*preparedProfile, error) {
 	var p *Profile
 	for i := range a.settings.Profiles {
 		if a.settings.Profiles[i].Enabled {
@@ -147,16 +191,17 @@ func (a *App) start() error {
 		}
 	}
 	if p == nil {
-		return errors.New("请先启用一个配置")
+		return nil, errors.New("请先启用一个配置")
 	}
 	b, e := os.ReadFile(a.profilePath(p.ID))
 	if e != nil {
-		return e
+		return nil, e
 	}
 	opt, e := config.Parse(b)
 	if e != nil {
-		return e
+		return nil, e
 	}
+	a.startup.Mark(nodeConfigParsed, map[string]any{"profile": p.Name})
 	// TUN is deliberately deferred; preserve endpoints, outbounds and route options.
 	ins := make([]option.Inbound, 0, len(opt.Inbounds))
 	for _, in := range opt.Inbounds {
@@ -178,12 +223,12 @@ func (a *App) start() error {
 	raw := fmt.Sprintf(`{"type":"mixed","tag":"singbox-win-local","listen":"%s","listen_port":%d}`, map[bool]string{true: "0.0.0.0", false: "127.0.0.1"}[a.settings.AllowLAN], a.settings.Port)
 	var in option.Inbound
 	if e = in.UnmarshalJSONContext(config.Context(), []byte(raw)); e != nil {
-		return e
+		return nil, e
 	}
 	opt.Inbounds = append(opt.Inbounds, in)
 	l, e := net.Listen("tcp", "127.0.0.1:0")
 	if e != nil {
-		return e
+		return nil, e
 	}
 	a.clash = "http://" + l.Addr().String()
 	l.Close()
@@ -196,6 +241,7 @@ func (a *App) start() error {
 	}
 	opt.Experimental.ClashAPI.ExternalController = strings.TrimPrefix(a.clash, "http://")
 	opt.Experimental.ClashAPI.Secret = a.secret
+	ruleSets := a.applyRuleSetCache(&opt)
 	native := a.nativeOptions()
 	if native.MemoryLimitMB > 0 {
 		debug.SetMemoryLimit(native.MemoryLimitMB * 1024 * 1024)
@@ -203,15 +249,51 @@ func (a *App) start() error {
 		debug.SetMemoryLimit(math.MaxInt64)
 	}
 	opt.Log = &option.LogOptions{Level: native.LogLevel, Timestamp: true, DisableColor: false}
+	return &preparedProfile{options: opt, profile: *p, ruleSets: ruleSets}, nil
+}
+
+// startPrepared builds and starts the core from prepared options. It is the
+// long step (rule-set parsing) that startAsync moves off the request path.
+func (a *App) startPrepared(prepared *preparedProfile) error {
+	ctx := context.Background()
+	instance, coreContext, err := a.newCore(ctx, prepared)
+	if err != nil {
+		return err
+	}
+	return a.installCore(ctx, instance, coreContext, prepared)
+}
+
+// newCore builds and starts a core instance. Only the startup recorder (which
+// has its own lock) is touched, so the caller may run it outside App.mu — that
+// is what keeps a rule-set download off the API path.
+func (a *App) newCore(ctx context.Context, prepared *preparedProfile) (*box.Box, context.Context, error) {
 	coreContext := config.Context()
-	instance, e := box.New(box.Options{Options: opt, Context: coreContext, PlatformLogWriter: a})
+	instance, e := box.New(box.Options{Options: prepared.options, Context: coreContext, PlatformLogWriter: a})
 	if e != nil {
-		return e
+		return nil, nil, e
 	}
 	if e = instance.Start(); e != nil {
 		instance.Close()
-		return e
+		return nil, nil, e
 	}
+	return instance, coreContext, nil
+}
+
+// installCore publishes a started instance. The caller must hold a.mu. When ctx
+// was cancelled while the core was starting (stop was requested), the new
+// instance is closed instead of installed.
+func (a *App) installCore(ctx context.Context, instance *box.Box, coreContext context.Context, prepared *preparedProfile) error {
+	if ctx != nil && ctx.Err() != nil {
+		_ = instance.Close()
+		return ctx.Err()
+	}
+	// The core's Start stage resolves every configured rule-set before reporting
+	// "sing-box started" (route/router.go StartStateStart loads rule-sets, then
+	// box.Start logs the milestone), so rule-set readiness and the core-started
+	// milestone share this instant.
+	readyAt := time.Now()
+	prepared.ruleSets.markReadyAt(a.startup, readyAt)
+	a.startup.MarkAt(nodeCoreStarted, readyAt, nil)
 	a.core = instance
 	a.connectionManager = service.FromContext[adapter.ConnectionManager](coreContext)
 	a.startEndpointStatus()
@@ -227,6 +309,44 @@ func (a *App) start() error {
 		}
 	}
 	return nil
+}
+
+// startAsync runs the core startup in the background. The caller must hold
+// a.mu. Preparing options is quick and runs under that lock, so the goroutine
+// reads a consistent settings/profiles snapshot; the long core start then runs
+// unlocked and the API keeps answering with starting=true. Installing the
+// result re-acquires the lock.
+func (a *App) startAsync() {
+	if a.core != nil || a.starting {
+		return
+	}
+	prepared, err := a.prepareOptions()
+	if err != nil {
+		a.lastError = truncateError(err)
+		return
+	}
+	a.starting = true
+	ctx, cancel := context.WithCancel(context.Background())
+	a.startCancel = cancel
+	go func() {
+		instance, coreContext, err := a.newCore(ctx, prepared)
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		a.starting = false
+		a.startCancel = nil
+		defer cancel()
+		if err != nil {
+			if !errors.Is(err, context.Canceled) {
+				a.lastError = truncateError(err)
+			}
+			return
+		}
+		if err = a.installCore(ctx, instance, coreContext, prepared); err != nil {
+			if !errors.Is(err, context.Canceled) {
+				a.lastError = truncateError(err)
+			}
+		}
+	}()
 }
 func (a *App) setProxy(on bool) error {
 	if on == a.proxy && (on || a.settings.ProxyBackup == nil) {
@@ -466,7 +586,7 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 				name = p.Name
 			}
 		}
-		result = map[string]any{"running": a.core != nil, "profile": name, "system_proxy": a.proxy, "tun": false, "version": version, "error": a.lastError}
+		result = map[string]any{"running": a.core != nil, "starting": a.starting, "profile": name, "system_proxy": a.proxy, "tun": false, "version": version, "error": a.lastError}
 	case strings.HasPrefix(r.URL.Path, "/api/core/") && r.Method == "POST":
 		switch strings.TrimPrefix(r.URL.Path, "/api/core/") {
 		case "start":
@@ -736,6 +856,13 @@ func main() {
 	}
 	defer release()
 	a := &App{dir: dir, settings: Settings{Port: 2085, Theme: "dark", Language: "zh-CN", Profiles: []Profile{}}, quit: make(chan struct{})}
+	// The log file exists before the first mark so t0 itself is written to
+	// engine.log; its level gate is read from native-core.json, which does not
+	// depend on settings.json.
+	a.logFile = newEngineLogFile(dir, a.fileLogLevel(), engineLogMaxBytes)
+	a.startup = newStartupRecorder(a.logFile)
+	a.startup.app = a
+	a.startup.MarkAt(nodeProcessStart, processStart, map[string]any{"pid": os.Getpid(), "version": version})
 	if b, e := os.ReadFile(filepath.Join(dir, "settings.json")); e == nil {
 		if e = json.Unmarshal(b, &a.settings); e != nil {
 			panic(e)
@@ -797,17 +924,19 @@ func main() {
 	}
 	defer a.unpublishRuntime()
 	fmt.Println(base)
+	a.startup.Mark(nodeAPIListening, map[string]any{"url": base})
 	a.WriteMessage(blog.LevelInfo, "HTTP API listening at "+base)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/", a.api)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { http.Error(w, "not found", 404) })
 	srv := &http.Server{Handler: a.httpHandler(mux, l.Addr().String(), base), ReadHeaderTimeout: 5 * time.Second}
 	go srv.Serve(l)
+	// Auto-connect must not delay the API: the native window only needs
+	// runtime.json to paint its first frame, and /api/state reports
+	// starting=true until the core is up. See requirement C.
 	if a.settings.AutoConnect {
 		a.mu.Lock()
-		if e := a.start(); e != nil {
-			a.lastError = e.Error()
-		}
+		a.startAsync()
 		a.mu.Unlock()
 	}
 	go func() {
@@ -843,4 +972,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	srv.Shutdown(ctx)
+	if a.logFile != nil {
+		_ = a.logFile.Close()
+	}
 }

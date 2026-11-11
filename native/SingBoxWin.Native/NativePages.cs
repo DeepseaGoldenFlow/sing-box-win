@@ -12,7 +12,11 @@ namespace SingBoxWin.Native;
 public sealed partial class MainWindow
 {
     private ConnectionPhase? transition;
-    private ConnectionState Session => new(transition ?? (!connected ? ConnectionPhase.Invalid : B(state, "running") ? ConnectionPhase.Connected : ConnectionPhase.Disconnected), connected, S(state, "profile") != "");
+    // "starting" is reported by /api/state while the engine brings the core up in
+    // the background (rule-set restore/download). Treating it as Connecting is
+    // live state, keeps the button disabled and shows progress instead of
+    // pretending the core is stopped.
+    private ConnectionState Session => new(transition ?? (!connected ? ConnectionPhase.Invalid : B(state, "running") ? ConnectionPhase.Connected : B(state, "starting") ? ConnectionPhase.Connecting : ConnectionPhase.Disconnected), connected, S(state, "profile") != "");
     private Button? toolbarStart;
     private readonly Dictionary<string, Border> dashboardCards = new();
     private JsonObject preferences = new();
@@ -139,7 +143,7 @@ public sealed partial class MainWindow
         var metrics = await api.Call("native/status"); var traffic = Session.IsConnectedStrict ? await api.Call("traffic") : null;
         var profiles = await api.Call("profiles") as JsonArray;
         if (page != "Dashboard" || status is null) return;
-        status.Text = T(S(state, "error") != "" ? "Error" : Session.IsConnectedStrict ? "Running" : Session.IsConnected ? "Connecting..." : "Stopped");
+        status.Text = T(S(state, "error") != "" ? "Error" : Session.IsConnectedStrict ? "Running" : B(state, "starting") ? "Starting" : Session.IsConnected ? "Connecting..." : "Stopped");
         if (systemProxyToggle is not null) {
             updatingProxy = true;
             systemProxyToggle.IsOn = B(state, "system_proxy");
@@ -406,7 +410,12 @@ public sealed partial class MainWindow
         ToolTipService.SetToolTip(coreBox, corePath);
         corePanel.Children.Add(coreBox);
         var logLevel = Choices("Log Level", ["error", "warn", "info", "debug", "trace"], Array.IndexOf(new[] { "error", "warn", "info", "debug", "trace" }, coreLogLevel), _ => { });
-        logLevel.SelectionChanged += async (_, _) => await Run(async () => { await api.Call("native/core", HttpMethod.Put, new { log_level = logLevel.SelectedItem?.ToString() }); coreLogLevel = logLevel.SelectedItem?.ToString() ?? "info"; }); corePanel.Children.Add(logLevel); body.Children.Add(Card(corePanel));
+        logLevel.SelectionChanged += async (_, _) => await Run(async () => { await api.Call("native/core", HttpMethod.Put, new { log_level = logLevel.SelectedItem?.ToString() }); coreLogLevel = logLevel.SelectedItem?.ToString() ?? "info"; }); corePanel.Children.Add(logLevel);
+        // Requirement A: explain that this selector also gates engine.log, and
+        // that the file is size-bounded, so nobody expects trace output to grow
+        // without limit.
+        corePanel.Children.Add(Text(T("Diagnostic Log Hint"), 12, "#9A9AA0"));
+        body.Children.Add(Card(corePanel));
         var overrides = new StackPanel { Spacing = 12 }; overrides.Children.Add(Text(T("Profile Override"), 18));
         foreach (string name in new[] { "No Default Route", "Exclude Local Networks", "Strict Route" }) overrides.Children.Add(new ToggleSwitch { Header = T(name), IsEnabled = false });
         overrides.Children.Add(Text(T("TUN is unavailable"), 12)); body.Children.Add(Card(overrides));

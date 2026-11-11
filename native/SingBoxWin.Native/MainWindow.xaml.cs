@@ -30,9 +30,20 @@ public sealed partial class MainWindow : Window
     private Canvas? chart;
     private Button? start, stop, restart;
     private readonly string prefsPath = System.IO.Path.Combine(EngineClient.DataDir, "native-preferences.json");
+    // First painted frame, measured from Application startup. Loaded fires once
+    // the visual tree has been laid out, which is the "window appears" instant
+    // requirement C asks for; it is reported to the engine once the API is up.
+    private long firstFrameMs = -1, firstFrameUnixMs = -1;
     public MainWindow()
     {
         InitializeComponent();
+        Root.Loaded += (_, _) => {
+            if (firstFrameMs >= 0) return;
+            firstFrameMs = App.StartupClock.ElapsedMilliseconds;
+            // Absolute instant: the engine process started at a different time,
+            // so comparisons in engine.log need a shared Unix clock.
+            firstFrameUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        };
         Title = "SFW · sing-box for Windows";
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true; SetTitleBar(TitleBar);
@@ -76,8 +87,23 @@ public sealed partial class MainWindow : Window
     private async void OnFirstActivated(object sender, WindowActivatedEventArgs args)
     {
         Activated -= OnFirstActivated;
+        // Requirement C: never let engine discovery or rule-set preparation run
+        // before the window has painted. Activate() already made the window
+        // visible; waiting for Loaded here guarantees the first frame is on
+        // screen before ConnectAsync spends its budget polling runtime.json.
+        if (firstFrameMs < 0)
+        {
+            var loaded = new TaskCompletionSource();
+            RoutedEventHandler? handler = null;
+            handler = (_, _) => { Root.Loaded -= handler; loaded.TrySetResult(); };
+            Root.Loaded += handler;
+            await loaded.Task;
+        }
         await Run(async () => {
             await api.ConnectAsync(); connected = true;
+            // Report the frame that was already painted. Fire-and-forget: the
+            // engine must not slow the UI, and older engines answer 404.
+            _ = api.ReportUIFirstFrameAsync(firstFrameUnixMs, firstFrameMs).ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
             var settings = await api.Call("settings");
             coreLogLevel = S(await api.Call("native/core"),"log_level");
             LoadLanguage(S(settings, "language").StartsWith("en") ? "en-US" : "zh-CN");

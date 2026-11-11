@@ -94,6 +94,13 @@ public sealed class EngineClient
         return request;
     }
 
+    // ReportUIFirstFrameAsync tells the engine when the window painted, so its
+    // startup-timing log can compare that instant with its own stages. The
+    // engine only records the number; it is never used to gate UI work.
+    // at_unix_ms is the cross-process instant (the two processes have
+    // different t0); elapsed_ms is the client-side duration for reference.
+    public Task ReportUIFirstFrameAsync(long frameUnixMs, long elapsedMs) =>
+        Call("native/ui-ready", HttpMethod.Post, new { at_unix_ms = frameUnixMs, elapsed_ms = elapsedMs, phase = "ui-first-frame" });
     public async Task<JsonNode?> Call(string path, HttpMethod? method = null, object? body = null, bool missingAllowed = false)
     {
         using var request = Request(method ?? HttpMethod.Get, path);
