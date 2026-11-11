@@ -1,6 +1,7 @@
 # Verify sing-box:// + singboxwin:// URL schemes and .bpf/.json file association.
 # Run in the interactive user's Windows session (HKCU, no admin needed).
-#   1. Register:   Invoke-RestMethod -Method Post -Body '{"enabled":true}' -ContentType application/json "$engine/api/protocol"
+#   1. The engine must already be running; this script authenticates with the
+#      token from %LOCALAPPDATA%\SFW\run\<instance-id> (proposal §0.2.4).
 #   2. This script checks the keys, then imports a real .bpf through the same
 #      path Explorer uses (ShellExecute -> engine -> /api/profiles).
 #   3. It then unregisters and asserts only our own keys/values are gone.
@@ -10,6 +11,10 @@ param(
     [switch]$KeepRegistration
 )
 $ErrorActionPreference = 'Stop'
+# The engine API is bearer-authenticated now (docs/proposal-tun-windows.md
+# §0.2.4), so even this HKCU test reads the token from the ACL-protected run
+# directory instead of calling loopback bare.
+. (Join-Path $PSScriptRoot 'sfw-runtime.ps1')
 $results = [ordered]@{ engine = $EngineExe; checks = @() }
 function Check([string]$name, [bool]$ok, [string]$detail = "") {
     $results.checks += [ordered]@{ name = $name; pass = $ok; detail = $detail }
@@ -44,9 +49,14 @@ if (Test-Path "$classes\.json\OpenWithProgids") {
 }
 
 # --- Register through the engine API, the same call the UI uses -------------
-$runtime = Get-Content "$env:APPDATA\sing-box-win\runtime.json" -Raw | ConvertFrom-Json
-$base = $runtime.url
-Invoke-RestMethod -Method Post -Uri "$base/api/protocol" -ContentType 'application/json' -Body '{"enabled":true}' | Out-Null
+$sfw = Get-SfwRuntime
+function Api([string]$path, [string]$method = 'GET', $body = $null, [switch]$OutFile) {
+    $p = @{ Uri = $sfw.Url + $path; Method = $method; Headers = (Get-SfwHeaders $sfw) }
+    if ($null -ne $body) { $p.ContentType = 'application/json'; $p.Body = ($body | ConvertTo-Json -Compress) }
+    if ($OutFile) { Invoke-WebRequest @p -OutFile $OutFile; return }
+    Invoke-RestMethod @p
+}
+Api '/api/protocol' 'Post' @{ enabled = $true } | Out-Null
 
 Check 'standard scheme registered' (Test-Path "$classes\sing-box") 'sing-box://'
 Check 'legacy scheme registered' (Test-Path "$classes\singboxwin") 'singboxwin://'
@@ -64,20 +74,19 @@ $tmp = Join-Path $env:TEMP ('sfw-assoc-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmp | Out-Null
 $bpf = Join-Path $tmp 'assoc-test.bpf'
 # Build a real BPF container with the engine's own exporter, then import it.
-$profiles = Invoke-RestMethod -Uri "$base/api/profiles"
+$profiles = Api '/api/profiles'
 if ($profiles.Count -eq 0) {
-    Invoke-RestMethod -Method Post -Uri "$base/api/profiles/import" -ContentType 'application/json' `
-        -Body (@{ name = 'assoc-seed'; content = '{"outbounds":[{"type":"direct","tag":"direct"}]}' } | ConvertTo-Json) | Out-Null
-    $profiles = Invoke-RestMethod -Uri "$base/api/profiles"
+    Api '/api/profiles/import' 'Post' @{ name = 'assoc-seed'; content = '{"outbounds":[{"type":"direct","tag":"direct"}]}' } | Out-Null
+    $profiles = Api '/api/profiles'
 }
 $seedId = $profiles[0].id
-Invoke-WebRequest -Uri "$base/api/profiles/$seedId/export?format=bpf" -OutFile $bpf | Out-Null
+Api "/api/profiles/$seedId/export?format=bpf" 'GET' $null -OutFile $bpf
 Check 'BPF export produced bytes' ((Get-Item $bpf).Length -gt 4) "$((Get-Item $bpf).Length) bytes"
 
-$before = (Invoke-RestMethod -Uri "$base/api/profiles").Count
+$before = (Api '/api/profiles').Count
 Start-Process -FilePath $bpf -Wait
 Start-Sleep -Milliseconds 800
-$after = (Invoke-RestMethod -Uri "$base/api/profiles").Count
+$after = (Api '/api/profiles').Count
 Check 'double-click .bpf imported a profile' ($after -eq $before + 1) "$before -> $after"
 
 # Wrong container must fail loudly and add nothing.
@@ -85,14 +94,14 @@ $bad = Join-Path $tmp 'bad.bpf'
 Set-Content -Path $bad -Value 'not a bpf container' -Encoding ascii
 Start-Process -FilePath $bad -Wait
 Start-Sleep -Milliseconds 800
-$state = Invoke-RestMethod -Uri "$base/api/state"
-$unchanged = (Invoke-RestMethod -Uri "$base/api/profiles").Count -eq $after
+$state = Api '/api/state'
+$unchanged = (Api '/api/profiles').Count -eq $after
 Check 'invalid BPF adds no profile' $unchanged
 Check 'invalid BPF leaves a visible error' ($state.error -ne '') $state.error
 
 # --- Unregister and assert cleanup ----------------------------------------
 if (-not $KeepRegistration) {
-    Invoke-RestMethod -Method Post -Uri "$base/api/protocol" -ContentType 'application/json' -Body '{"enabled":false}' | Out-Null
+    Api '/api/protocol' 'Post' @{ enabled = $false } | Out-Null
     $left = OurKeysPresent
     Check 'uninstall removes every registry key we own' ($left -eq 0) "$left key(s) left"
     # .json: only our value goes away; the key and every other app's value stay.

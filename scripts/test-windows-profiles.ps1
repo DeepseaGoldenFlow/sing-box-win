@@ -1,7 +1,15 @@
 # API integration test using only an isolated, inactive temporary profile.
+# Every call is authenticated with the engine token from the ACL-protected run
+# directory (docs/proposal-tun-windows.md §0.2.4); there is no bare loopback API.
 $ErrorActionPreference='Stop'
-$r=Get-Content "$env:APPDATA\sing-box-win\runtime.json" -Raw|ConvertFrom-Json
-$original=Invoke-RestMethod ($r.url+'/api/state')
+. (Join-Path $PSScriptRoot 'sfw-runtime.ps1')
+$sfw=Get-SfwRuntime
+function Api([string]$path,[string]$method='GET',$body=$null) {
+    $p=@{Uri=$sfw.Url+$path;Method=$method;Headers=(Get-SfwHeaders $sfw)}
+    if($null -ne $body){$p.ContentType='application/json';$p.Body=($body|ConvertTo-Json -Compress)}
+    Invoke-RestMethod @p
+}
+$original=Api '/api/state'
 $id=$null; $job=$null
 $result=[ordered]@{}
 try {
@@ -29,26 +37,26 @@ try {
         Start-Sleep -Milliseconds 100
     }
     if(!$port) {throw 'Mock subscription server did not start'}
-    $p=Invoke-RestMethod ($r.url+'/api/profiles/import') -Method Post -ContentType application/json -Body (@{name='__profile_management_test__';url="http://127.0.0.1:$port/config.json"}|ConvertTo-Json)
+    $p=Api '/api/profiles/import' 'Post' @{name='__profile_management_test__';url="http://127.0.0.1:$port/config.json"}
     $id=$p.id
-    $path=$r.url+'/api/profiles/'+$id
-    Invoke-RestMethod $path -Method Put -ContentType application/json -Body (@{name='__profile_management_edited__';url="http://127.0.0.1:$port/config.json";auto_update=$true;update_minutes=5}|ConvertTo-Json) | Out-Null
-    $detail=Invoke-RestMethod $path
+    $path='/api/profiles/'+$id
+    Api $path 'Put' @{name='__profile_management_edited__';url="http://127.0.0.1:$port/config.json";auto_update=$true;update_minutes=5} | Out-Null
+    $detail=Api $path
     if($detail.profile.name -ne '__profile_management_edited__' -or $detail.profile.update_minutes -ne 5 -or !$detail.profile.auto_update) {throw 'Profile metadata edit failed'}
     $result.edit_name_url_and_auto_update=$true
-    Invoke-RestMethod ($path+'/update') -Method Post | Out-Null
-    $detail=Invoke-RestMethod $path
+    Api ($path+'/update') 'Post' | Out-Null
+    $detail=Api $path
     if($detail.content -notmatch 'windows-profile-test') {throw 'Subscription update did not save response'}
     $result.subscription_update_and_readback=$true
     $rejected=$false
-    try { Invoke-RestMethod $path -Method Put -ContentType application/json -Body '{"content":"invalid JSON"}' | Out-Null } catch { $rejected=$true }
-    if(!$rejected -or (Invoke-RestMethod $path).content -ne $detail.content) {throw 'Invalid JSON overwrote configuration'}
+    try { Api $path 'Put' @{content='invalid JSON'} | Out-Null } catch { $rejected=$true }
+    if(!$rejected -or (Api $path).content -ne $detail.content) {throw 'Invalid JSON overwrote configuration'}
     $result.invalid_content_preserves_original=$true
-    Invoke-RestMethod $path -Method Delete | Out-Null
-    if((Invoke-RestMethod ($r.url+'/api/profiles')).id -contains $id) {throw 'Deleted profile still listed'}
+    Api $path 'Delete' | Out-Null
+    if((Api '/api/profiles').id -contains $id) {throw 'Deleted profile still listed'}
     if(!(Get-ChildItem "$env:APPDATA\sing-box-win\profile-trash" -Filter "$id-*.json")) {throw 'Deletion backup missing'}
     $result.delete_and_recovery_copy=$true
-    $now=Invoke-RestMethod ($r.url+'/api/state')
+    $now=Api '/api/state'
     if($now.profile -ne $original.profile -or !$now.running -or !$now.system_proxy) {throw 'Test disturbed the active profile'}
     $result.active_profile_unchanged=$true
     $result.ok=$true
@@ -56,7 +64,7 @@ try {
 finally {
     if($job) { Stop-Job $job -ErrorAction SilentlyContinue; Remove-Job $job -Force -ErrorAction SilentlyContinue }
     if($id) {
-        try { if((Invoke-RestMethod ($r.url+'/api/profiles')).id -contains $id) {Invoke-RestMethod ($r.url+'/api/profiles/'+$id) -Method Delete|Out-Null} }catch{}
+        try { if((Api '/api/profiles').id -contains $id) {Api ('/api/profiles/'+$id) 'Delete'|Out-Null} }catch{}
         foreach($dir in @('profile-history','profile-trash')) { Get-ChildItem "$env:APPDATA\sing-box-win\$dir" -Filter "$id-*.json" -ErrorAction SilentlyContinue | Remove-Item -Force }
     }
 }

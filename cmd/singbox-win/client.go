@@ -11,10 +11,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
+// proxyRecord is the per-user HKCU proxy backup. It never contains the engine
+// token; only internal/platform token paths do.
 type proxyRecord struct {
 	Backup platform.ProxyBackup `json:"backup"`
 	Server string               `json:"server"`
@@ -47,54 +48,6 @@ func (a *App) restoreProxy() error {
 		return platform.WriteProxy(*a.settings.ProxyBackup)
 	}
 	return nil
-}
-
-// activationPayload is what a second instance (or the native client) forwards
-// to the running engine: either a deep link or a file opened via association.
-type activationPayload struct {
-	Link string `json:"link"`
-	Path string `json:"path"`
-}
-
-func activateExisting(dir string) error {
-	var last error
-	for i := 0; i < 600; i++ {
-		var r struct{ URL string }
-		b, e := os.ReadFile(filepath.Join(dir, "runtime.json"))
-		if e == nil {
-			e = json.Unmarshal(b, &r)
-		}
-		if e == nil {
-			u, err := url.Parse(r.URL)
-			if err != nil || u.Scheme != "http" || !strings.HasPrefix(u.Host, "127.0.0.1:") {
-				return errors.New("invalid runtime URL")
-			}
-			payload := activationPayload{}
-			for _, v := range os.Args[1:] {
-				switch {
-				case isDeepLinkArg(v):
-					payload.Link = v
-				case fileAssociationArg(v):
-					payload.Path = v
-				}
-			}
-			body, _ := json.Marshal(payload)
-			c := http.Client{Timeout: 60 * time.Second}
-			resp, err := c.Post(r.URL+"/api/activate", "application/json", bytes.NewReader(body))
-			if err == nil {
-				defer resp.Body.Close()
-				if resp.StatusCode == 200 {
-					return nil
-				}
-				msg, _ := io.ReadAll(resp.Body)
-				return errors.New(string(msg))
-			}
-			e = err
-		}
-		last = e
-		time.Sleep(100 * time.Millisecond)
-	}
-	return fmt.Errorf("activate existing instance: %w", last)
 }
 
 // importLink imports a deep link. Both the standard sing-box scheme and the

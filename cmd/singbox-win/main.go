@@ -81,6 +81,8 @@ type App struct {
 	secret            string
 	proxy             bool
 	quit              chan struct{}
+	auth              *engineAuth
+	runDir            string
 	trafficTime       time.Time
 	uploadTotal       float64
 	downloadTotal     float64
@@ -332,18 +334,29 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch {
 	case r.URL.Path == "/api/activate" && r.Method == "POST":
+		// Activation is already authenticated by the bearer gate. The instance
+		// header additionally proves the caller read this engine's runtime.json,
+		// so a forwarding process cannot pour a link into a newer engine (§0.2.5).
+		if !a.auth.activationInstanceMatches(r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
 		var b activationPayload
 		err = decode(r, &b)
+		activated := false
 		if err == nil && b.Link != "" {
 			err = a.importLink(b.Link)
+			activated = err == nil
 		} else if err == nil && b.Path != "" {
 			_, err = a.importProfileFile(b.Path)
+			activated = err == nil
 		}
 		if err != nil {
 			// The second process just shows this error and exits; record it so the
 			// already-running UI explains what went wrong with the clicked link/file.
 			a.lastError = truncateError(err)
 		}
+		result = activationResult{Activated: activated}
 	case r.URL.Path == "/api/protocol" && r.Method == "POST":
 		var b struct{ Enabled bool }
 		if err = decode(r, &b); err == nil {
@@ -661,7 +674,9 @@ func main() {
 		panic(e)
 	}
 	if !primary {
-		if e = activateExisting(dir); e != nil {
+		// A second launch authenticates to the primary with the token from its
+		// protected run directory; it never opens another engine (§0.2.5).
+		if e = activateExisting(); e != nil {
 			panic(e)
 		}
 		return
@@ -714,31 +729,26 @@ func main() {
 		}
 	}
 	a.save()
+	if e := a.prepareRuntime(); e != nil {
+		panic(e)
+	}
 	l, e := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if e != nil {
 		panic(e)
 	}
 	base := "http://" + l.Addr().String()
-	os.WriteFile(filepath.Join(dir, "runtime.json"), []byte(fmt.Sprintf(`{"url":%q,"pid":%d}`, base, os.Getpid())), 0600)
-	defer os.Remove(filepath.Join(dir, "runtime.json"))
+	// runtime.json is published only after the token is in place, so a client can
+	// never observe an endpoint it is unable to authenticate to.
+	if e := a.publishRuntime(base); e != nil {
+		panic(e)
+	}
+	defer a.unpublishRuntime()
 	fmt.Println(base)
 	a.WriteMessage(blog.LevelInfo, "HTTP API listening at "+base)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/", a.api)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { http.Error(w, "not found", 404) })
-	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Host != l.Addr().String() {
-			http.Error(w, "invalid host", 403)
-			return
-		}
-		if origin := r.Header.Get("Origin"); origin != "" && origin != base {
-			http.Error(w, "invalid origin", 403)
-			return
-		}
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'")
-		mux.ServeHTTP(w, r)
-	}), ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{Handler: a.httpHandler(mux, l.Addr().String(), base), ReadHeaderTimeout: 5 * time.Second}
 	go srv.Serve(l)
 	if a.settings.AutoConnect {
 		a.mu.Lock()

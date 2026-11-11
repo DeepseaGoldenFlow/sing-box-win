@@ -13,7 +13,7 @@ curl -fsSL "$SUBSCRIPTION_URL" -o /tmp/sub.json
 SINGBOX_TEST_SUB=/tmp/sub.json make check
 ```
 
-输出 `build/singbox-win.exe`，Windows amd64，`CGO_ENABLED=0`，无 cgo、Wails 或 WebView2 宿主。构建入口可使用 Go 1.24.5 的自动工具链功能，但实际编译使用 Go 1.26.10：真实订阅包含 `http_clients`，采用 sing-box 1.14.4（要求 Go ≥1.25.5），因此不能使用 Go 1.24.5 编译器直接编译。Makefile 固定工具链与 `with_gvisor,with_quic,with_utls,with_clash_api` 标签；Tailscale 必须启用 gVisor。离线构建需提前缓存工具链和依赖。
+输出 `build/singbox-win.exe`（引擎）与 `build/sfw-tun-broker.exe`（P0 仅 dry-run 的窄服务 broker），Windows amd64，`CGO_ENABLED=0`，无 cgo、Wails 或 WebView2 宿主。broker 是控制台子系统服务，不能加 `-H windowsgui`；它只能由管理员批准的安装脚本在测试机注册。构建入口可使用 Go 1.24.5 的自动工具链功能，但实际编译使用 Go 1.26.10：真实订阅包含 `http_clients`，采用 sing-box 1.14.4（要求 Go ≥1.25.5），因此不能使用 Go 1.24.5 编译器直接编译。Makefile 固定工具链与 `with_gvisor,with_quic,with_utls,with_clash_api` 标签；Tailscale 必须启用 gVisor。离线构建需提前缓存工具链和依赖。
 
 等价命令：
 
@@ -28,7 +28,7 @@ go vet ./...
 
 启动后从 Profiles 导入 URL、本地文件路径、文件选择器或粘贴 JSON。启用配置后在 Dashboard 启动内核，再开启系统代理。切换启用配置和修改监听端口前需停止内核。Settings 可配置自动连接、开机自启、更新间隔和局域网监听。
 
-数据目录 `%APPDATA%\sing-box-win\`：`settings.json` 存配置元数据及设置，`profiles/*.json` 存订阅原文，`runtime.json` 记录当前 HTTP 地址和 PID。URL、配置可能含凭据，请妥善保护此目录；仓库和构建产物不含订阅内容。设置和配置仅应由当前用户访问。
+数据目录 `%APPDATA%\sing-box-win\`：`settings.json` 存配置元数据及设置，`profiles/*.json` 存订阅原文。运行期记录改放 `%LOCALAPPDATA%\SFW\run\<instance-id>\`：`runtime.json` 只含公开元数据（`url,pid,process_start_time,instance_id,user_sid,session_id,protocol_version`），`engine.token` 是引擎 API 的 bearer 密钥。该目录与 token 文件使用显式 DACL（仅当前用户 SID 与 SYSTEM），不继承父目录授权；`runtime.json` 永不包含 token。所有 `/api/*` 请求（含二次实例激活）除 Host/Origin 检查外都必须带 `Authorization: Bearer <engine.token>`，否则 401。URL、配置和 token 可能含凭据，请妥善保护；仓库和构建产物不含订阅内容或 token。认证与权限边界见 [P0 运行边界](docs/tun-p0-boundary.md)。
 
 配置通过 sing-box `option.Options.UnmarshalJSONContext`（当前版本的原生 JSON 解析入口）解析，注册真实 Tailscale endpoint/DNS 实现；不转换成自定义 JSON 模型。运行副本保留 endpoint、路由和 outbound，过滤 TUN inbound（本期未提供管理员权限/wintun 支持），关闭配置中的 `set_system_proxy`，监听地址遵循 sing-box for Windows 允许局域网设置，并增加 sing-box for Windows 专用 mixed 入口（默认 2085）。原订阅不改写。
 
@@ -47,7 +47,7 @@ Clash 控制器另开随机 loopback 端口并配置每次启动随机密钥。U
 
 ## P1.5 sing-box for Windows
 
-Windows 使用当前用户命名互斥实现单实例；二次启动会通过 `runtime.json` 的 loopback 地址通知现有实例重新打开界面，深链参数也会转交。Linux 自检使用 flock，强杀不会留下阻塞锁。引擎通过 `POST /api/protocol {"enabled":true|false}` 注册/取消 `sing-box://import-remote-profile?url=<encoded>#<name>`（标准 scheme）与历史 `singboxwin://install-config?url=<encoded>`，同时注册 `.bpf` 默认处理程序和 `.json` 的「打开方式」项；注册表清单、卸载恢复与验证脚本见 [`docs/windows-file-associations.md`](docs/windows-file-associations.md)。引擎按标准格式生成分享链接（`generateFmtDeepLink`）。导入链接含订阅地址，分享前请确认是否含凭据。
+Windows 使用带显式 DACL、按用户 SID 命名的 mutex 与 event 实现单实例和二次激活：只有同一用户会话能创建、等待或触发该 event，其他 SID/会话拿到的是 OS 拒绝，不会代替当前 UI 激活窗口。二次启动通过 `runtime.json` 的 loopback 地址、携带 `Authorization: Bearer <engine.token>` 与 `X-SFW-Instance` 头通知现有引擎；空激活只恢复窗口，不会自动导入深链或启动第二个 engine。Linux 自检使用 flock，强杀不会留下阻塞锁。引擎通过 `POST /api/protocol {"enabled":true|false}` 注册/取消 `sing-box://import-remote-profile?url=<encoded>#<name>`（标准 scheme）与历史 `singboxwin://install-config?url=<encoded>`，同时注册 `.bpf` 默认处理程序和 `.json` 的「打开方式」项；注册表清单、卸载恢复与验证脚本见 [`docs/windows-file-associations.md`](docs/windows-file-associations.md)。引擎按标准格式生成分享链接（`generateFmtDeepLink`）。导入链接含订阅地址，分享前请确认是否含凭据。
 
 节点卡片列出当前配置的全部分组（`Selector` 以及 `URLTest` / `Fallback` / `LoadBalance` / `Relay` 等自动策略组）、成员、当前选择和延迟；运行时使用 Clash API 测速，停止时仍能读取配置分组。只有 `Selector` 组的成员行可以点击切换（`PUT /proxies/{group}`）；自动策略组的成员行是只读的，组头标明当前策略（如「URLTest 自动选择（最低延迟）」）与「只读」，当前生效节点按 `now` 字段高亮，点击不会向后端发请求，因此不再出现 `Clash API 400: Must be a Selector` 报错。
 
@@ -63,7 +63,9 @@ The engine always runs headless and serves the HTTP API; the UI is the native
 WinUI 3 app in `native/SingBoxWin.Native`. `--headless` (alias `--no-ui`) is
 accepted for compatibility.
 `--port 2086` fixes the API port; omit it for a random loopback port recorded in
-`runtime.json`. Proxy settings still use their own port (default 2085).
+`%LOCALAPPDATA%\SFW\run\<instance-id>\runtime.json`. Proxy settings still use
+their own port (default 2085). Every API call needs the bearer token from the
+adjacent `engine.token`; see [P0 运行边界](docs/tun-p0-boundary.md).
 
 - `GET /api/tools/info`: `version`, `core_version`, `mode`, `data_dir`, `log_path`.
 - `GET /api/tools/tailscale`: `enabled`, `registered`, `state_dir_exists`,

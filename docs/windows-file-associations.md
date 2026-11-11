@@ -55,8 +55,11 @@
 在 Windows 交互式用户会话中：
 
 ```powershell
-# 1. 注册（等同设置页开关）
-Invoke-RestMethod -Method Post -Uri "$base/api/protocol" -ContentType 'application/json' -Body '{"enabled":true}'
+# 1. 注册（等同设置页开关）。CMP-41 起所有 /api/* 都要求 bearer token，
+#    从 ACL 保护的运行目录读取；不要把 token 写入脚本或日志。
+. .\scripts\sfw-runtime.ps1
+$sfw = Get-SfwRuntime
+Invoke-RestMethod -Method Post -Uri "$($sfw.Url)/api/protocol" -Headers (Get-SfwHeaders $sfw) -ContentType 'application/json' -Body '{"enabled":true}'
 
 # 2. 自动验收：键值、.json 默认处理程序未被改动、双击 .bpf 真正导入、
 #    非法容器不新增配置且留下可见错误、卸载后只删除本程序的键

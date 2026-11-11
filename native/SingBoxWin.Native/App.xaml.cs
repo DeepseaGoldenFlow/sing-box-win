@@ -3,8 +3,6 @@ using System.Runtime.InteropServices;
 namespace SingBoxWin.Native;
 public partial class App : Application
 {
-    private Mutex? instance;
-    private EventWaitHandle? activation;
     private MainWindow? window;
     private static void WriteError(object? error)
     {
@@ -21,15 +19,16 @@ public partial class App : Application
     }
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        instance = new Mutex(true, @"Global\SingBoxWinNative", out bool first);
-        activation = new EventWaitHandle(false, EventResetMode.AutoReset, @"Global\SingBoxWinNativeActivate");
-        if (!first) { activation.Set(); Exit(); return; }
+        // A second launch only brings the existing window forward. It does not
+        // start an engine and does not import a deep link; profiles and links
+        // still require the engine's authenticated activation path.
+        if (!NativeActivation.Acquire()) { NativeActivation.SignalPrimary(); Exit(); return; }
         window = new MainWindow(); window.Activate();
-        _ = Task.Run(() => { while (activation.WaitOne()) window.DispatcherQueue.TryEnqueue(() => {
+        NativeActivation.Listen(() => window.DispatcherQueue.TryEnqueue(() => {
             window.AppWindow.Show();
             if (window.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter) presenter.Restore();
             window.Activate(); SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(window));
-        }); });
+        }));
     }
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
 }

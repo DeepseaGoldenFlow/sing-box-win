@@ -200,7 +200,7 @@ public sealed partial class MainWindow : Window
     }
     private async Task Quit() {
         if (connected) await api.Call("quit", HttpMethod.Post);
-        exiting = true; timer.Stop(); tray?.Dispose(); Application.Current.Exit();
+        exiting = true; timer.Stop(); tray?.Dispose(); NativeActivation.Dispose(); Application.Current.Exit();
     }
     private async Task Refresh()
     {

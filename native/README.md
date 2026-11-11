@@ -4,7 +4,7 @@
 
 Implemented pages: dashboard (live state, core controls, upload/download, rolling 60 point plot and totals), profiles (URL import, enable/disable/delete), tools (Tailscale status and connectivity test, four placeholders), settings (engine preferences, immediate language/theme switching and native close behavior). Connections and logs are basic page skeletons with working lists, close all, level filter and auto scroll. No advanced connection actions, log search/export or profile context menu in this phase.
 
-The default close action hides the native window and leaves the engine running. Launching the executable again signals the primary instance to show and activate the existing window. Explicit Quit, or Close when “Quit when window closes” is enabled, calls the engine's quit endpoint before exiting. The native close preference alone is stored in `%APPDATA%/sing-box-win/native-preferences.json`. Engine settings remain owned by the engine. Its existing `auto_start` behavior is preserved: the Go executable is registered at sign-in, not the native executable.
+The default close action hides the native window and leaves the engine running. Launching the executable again signals the primary instance to show and activate the existing window: the single-instance mutex and activation event are per-user objects with an explicit DACL (`Local\sing-box-win-<SID>`, `Local\SingBoxWinNative-<SID>`, `Local\SingBoxWinNativeActivate-<SID>`), so another SID or session cannot signal activation. Explicit Quit, or Close when “Quit when window closes” is enabled, calls the engine's quit endpoint before exiting. The native close preference alone is stored in `%APPDATA%/sing-box-win/native-preferences.json`. Engine settings remain owned by the engine. Its existing `auto_start` behavior is preserved: the Go executable is registered at sign-in, not the native executable.
 
 ## API contract
 
@@ -12,7 +12,9 @@ Verified against `cmd/singbox-win/main.go`, `client.go`, `tools.go` before imple
 
 | Method / source | Fields consumed or submitted |
 | --- | --- |
-| `%APPDATA%/sing-box-win/runtime.json` | `url`, `pid` (engine process metadata); only a loopback HTTP URL is accepted |
+| `%LOCALAPPDATA%/SFW/run/<instance-id>/runtime.json` | `url`, `pid`, `process_start_time`, `instance_id`, `user_sid`, `session_id`, `protocol_version`; only a loopback HTTP URL is accepted, and `process_start_time` must match the PID's actual start time |
+| `%LOCALAPPDATA%/SFW/run/<instance-id>/engine.token` | bearer token for every Engine API call and for second-instance activation; never logged, displayed, or written to a result file |
+| `%APPDATA%/sing-box-win/runtime.json` | removed in CMP-41; the engine no longer publishes this unauthenticated file |
 | GET `/api/state` | `running`, `profile`, `system_proxy`, `error` |
 | POST `/api/core/start`, `/api/core/stop`, `/api/core/restart` | no request body; HTTP success or raw error body |
 | GET `/api/traffic` | `upload`, `download`, `upload_total`, `download_total`, `connections`; requested only while core runs |

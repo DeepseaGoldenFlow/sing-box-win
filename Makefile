@@ -5,7 +5,9 @@ export GOTOOLCHAIN=go1.26.10
 .PHONY: build check
 build:
 	GOOS=windows GOARCH=amd64 $(GO) build -ldflags '-H windowsgui -s -w' -o build/sing-box-win.exe ./cmd/singbox-win
+# The broker is a console-subsystem service host, so it must NOT use -H windowsgui.
+	GOOS=windows GOARCH=amd64 $(GO) build -ldflags '-s -w' -o build/sfw-tun-broker.exe ./cmd/sfw-tun-broker
 check:
 	$(GO) vet ./...
 	GOOS=windows GOARCH=amd64 $(GO) vet ./...
-	$(GO) test ./internal/config
+	$(GO) test ./internal/... ./cmd/singbox-win

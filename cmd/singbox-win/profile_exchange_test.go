@@ -19,10 +19,20 @@ const sampleConfig = `{"outbounds":[{"type":"direct","tag":"direct"}]}`
 func newExchangeApp(t *testing.T) *App {
 	t.Helper()
 	a := &App{dir: t.TempDir(), settings: Settings{Port: 0}}
+	a.auth = newEngineAuth(testToken, strings.Repeat("c", 32))
 	if err := os.MkdirAll(filepath.Join(a.dir, "profiles"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	return a
+}
+
+// activateRequest builds the authenticated request /api/activate requires:
+// the handler checks the instance binding in addition to the bearer gate
+// (docs/proposal-tun-windows.md §0.2.5).
+func activateRequest(a *App, body string) *http.Request {
+	r := httptest.NewRequest("POST", "/api/activate", strings.NewReader(body))
+	r.Header.Set(instanceHeader, a.auth.instanceID)
+	return r
 }
 
 func TestImportBPFLocal(t *testing.T) {
@@ -328,7 +338,7 @@ func TestImportBytesEndpoint(t *testing.T) {
 func TestActivateEndpointReportsFailure(t *testing.T) {
 	a := newExchangeApp(t)
 	w := httptest.NewRecorder()
-	a.api(w, httptest.NewRequest("POST", "/api/activate", strings.NewReader(`{"path":"C:\\nope\\missing.bpf"}`)))
+	a.api(w, activateRequest(a, `{"path":"C:\\nope\\missing.bpf"}`))
 	if w.Code == 200 {
 		t.Fatal("missing association file accepted")
 	}
@@ -341,7 +351,7 @@ func TestActivateEndpointAcceptsPath(t *testing.T) {
 	a := newExchangeApp(t)
 	path := writeTemp(t, "activated.json", sampleConfig)
 	w := httptest.NewRecorder()
-	a.api(w, httptest.NewRequest("POST", "/api/activate", strings.NewReader(`{"path":`+jsonString(path)+`}`)))
+	a.api(w, activateRequest(a, `{"path":`+jsonString(path)+`}`))
 	if w.Code != 200 {
 		t.Fatalf("status %d body %s", w.Code, w.Body.String())
 	}
