@@ -109,13 +109,34 @@ try {
     # --- 4. Bearer gate on read AND write endpoints (§0.2.4) --------------
     # /api/quit is last: if the gate regressed it would stop the engine here and
     # the later checks would fail too, which is the intended loud failure.
+    # The list mirrors every write route served by main.go/pages.go, including
+    # the profile/QR/settings routes added by later features, so a new route
+    # cannot be added without this check failing.
     $writes = @(
         @{ Path = '/api/core/start'; Method = 'Post' },
         @{ Path = '/api/core/stop'; Method = 'Post' },
+        @{ Path = '/api/protocol'; Method = 'Post'; Body = '{"enabled":false}' },
         @{ Path = '/api/proxy'; Method = 'Post'; Body = '{"enabled":false}' },
         @{ Path = '/api/node/select'; Method = 'Put'; Body = '{"group":"g","name":"n"}' },
+        @{ Path = '/api/node/delay'; Method = 'Post'; Body = '{"group":"g","name":"n"}' },
         @{ Path = '/api/logs'; Method = 'Delete' },
         @{ Path = '/api/activate'; Method = 'Post'; Body = '{}' },
+        @{ Path = '/api/profiles'; Method = 'Post'; Body = '{"name":"n","url":"https://example.com/p"}' },
+        @{ Path = '/api/profiles/import'; Method = 'Post'; Body = '{"name":"n","url":"https://example.com/p"}' },
+        @{ Path = '/api/profiles/import/file'; Method = 'Post'; Body = '{"name":"n","data":""}' },
+        @{ Path = '/api/profiles/import/bpf'; Method = 'Post'; Body = '{"data":""}' },
+        @{ Path = '/api/profiles/import/qr'; Method = 'Post'; Body = '{"name":"n","data":""}' },
+        @{ Path = '/api/profiles/00000000/update'; Method = 'Post' },
+        @{ Path = '/api/profiles/00000000'; Method = 'Put'; Body = '{"name":"n"}' },
+        @{ Path = '/api/profiles/00000000'; Method = 'Delete' },
+        @{ Path = '/api/settings'; Method = 'Post'; Body = '{}' },
+        @{ Path = '/api/routing'; Method = 'Post'; Body = '{}' },
+        @{ Path = '/api/tools/connectivity'; Method = 'Post'; Body = '{}' },
+        @{ Path = '/api/tools/tailscale/test'; Method = 'Post'; Body = '{}' },
+        @{ Path = '/api/tools/tailscale/exit-node'; Method = 'Post'; Body = '{}' },
+        @{ Path = '/api/groups/urltest'; Method = 'Post'; Body = '{}' },
+        @{ Path = '/api/native/core'; Method = 'Put'; Body = '{}' },
+        @{ Path = '/api/native/profile'; Method = 'Put'; Body = '{}' },
         @{ Path = '/api/quit'; Method = 'Post' }
     )
     $badWrites = @()
